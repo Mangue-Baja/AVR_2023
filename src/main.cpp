@@ -18,6 +18,7 @@ LiquidCrystal_I2C lcd(0x27, 16, 2);
 /* Global Variables */
 bool sd_exist = false;
 bool esp_now_ok = false;
+uint8_t M_30_ok = 0, M_100_101_ok = 0;
 
 /* ESP-NOW Callbacks */
 void receiveCallBack(const uint8_t* macAddr, const uint8_t* data, int len);
@@ -66,6 +67,15 @@ void loop()
         esp_now_register_send_cb(sentCallBack);
 
       } else {
+        
+        #ifdef M_30
+          digitalWrite(LED_BUILTIN, HIGH);
+          esp_restart();
+        #elif defined(M_100_101)
+          digitalWrite(LED_BUILTIN, HIGH);
+          esp_restart();
+        #endif
+
         Serial.println("ESP-NOW init Failed!!");
         digitalWrite(LED_BUILTIN, HIGH);
 
@@ -84,15 +94,32 @@ void loop()
         esp_restart(); 
       }
 
+      #ifdef M_30
+        while(M_30_ok!=2) { Serial.println("Await Please"); }
+        
+        st = IDLE;
+        break;
+
+      #elif defined(M_100_101)
+      while(M_100_101_ok!=2) { Serial.println("Await please"); }
+      
+      st = IDLE
+      break;
+
+      #endif
+
       bool ss = sent_to_all("ok");
 
       ss ? st=WAIT : 0;
     }
       break;
 
+    case IDLE:
+      break;
+
     case WAIT:
 
-      if(listen_30 && listen_100_101)
+      if(esp_now_ok && listen_30 && listen_100_101)
       {
         lcd.clear();
         lcd.print(F("Tudo Certo!"));
@@ -109,25 +136,26 @@ void loop()
         lcd.print(F("Testando..."));
       }
       
-
       break;
 
     case BEGIN:
 
+      /*
       #ifdef M_30
-        /**/
+        
         st = ST_30;
         break;
       #elif defined(M_100_101)
-        /**/
+        
         st = ST_100_101;
         break;
       #endif
+      */
 
       lcd.print(F("Bem vindo!!"));
       delay(250);
       lcd.clear();
-      ((read_config()) ? (lcd.printf("SD OK!!: %d", sd_exist |= 0x01)) : (lcd.printf("Não há SD: %d", sd_exist &= ~0x01)));
+      (read_config() ? (lcd.printf("SD OK!!: %d", sd_exist |= 0x01)) : (lcd.printf("Não há SD: %d", sd_exist &= ~0x01)));
       delay(1000);
       lcd.clear();  
 
@@ -167,10 +195,6 @@ void loop()
       /* Not yet */
       break;
 
-    case CONFIG:
-      /* Not yet */
-      break;
-
     case ST_30:
       break;
 
@@ -205,6 +229,25 @@ void receiveCallBack(const uint8_t* macAddr, const uint8_t* data, int len)
 
   Serial.printf("Receive message from: %s - %s\n", macStr, buffer);
 
+  if(!strcmp("ok", buffer))
+  {
+
+    #ifdef M_30
+      M_30_ok |= 0x01;
+      (sent_to_all("30_ok") ? M_30_ok << 1 : 0);
+
+      return;
+      
+    #elif M_100_101
+      M_100_101_ok |= 0x01;
+      (sent_to_all("100_101_ok") ? M_100_101_ok << 1 : 0);
+
+      return;
+
+    #endif
+
+  }
+
   if(!strcmp("30_ok", buffer))
   {
     listen_30 = true;
@@ -213,15 +256,14 @@ void receiveCallBack(const uint8_t* macAddr, const uint8_t* data, int len)
     //lcd.clear();
   }
 
-  else if(!strcmp("100_101_ok", buffer))
+  if(!strcmp("100_101_ok", buffer))
   {
     listen_100_101 = true;
     //lcd.print(F("Ouvindo 100 &"));
     //lcd.setCursor(1,8); lcd.print(F("101"));
     //delay(500);
     //lcd.clear();
-  }
-  
+  } 
 }
 
 void formatMacAddress(const uint8_t* MACAddr, char* info, int maxLength)
@@ -272,7 +314,7 @@ bool sent_to_all(const String &msg)
 bool read_config()
 {
   if(!SD.begin()) 
-    { delay(1000); return false; }
+    { delay(500); return false; }
   else 
     { Mount_SD(); return true; }
 }

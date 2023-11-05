@@ -3,7 +3,7 @@
 
 #include <Arduino.h>
 
-typedef enum {INIT, WAIT, BEGIN, MENU, RUN, CONFIG, ST_30, ST_100_101} state;
+typedef enum {INIT, WAIT, IDLE, BEGIN, MENU, RUN, ST_30, ST_100_101} state;
 
 uint8_t st = INIT;
 

@@ -18,12 +18,18 @@ LiquidCrystal_I2C lcd(0x27, 16, 2);
 /* Global Variables */
 bool sd_exist = false;
 bool esp_now_ok = false;
+bool B_SEL_CLICK = false, B_CANCEL_CLICK = false;
 uint8_t M_30_ok = 0, M_100_101_ok = 0;
 
 /* ESP-NOW Callbacks */
 void receiveCallBack(const uint8_t* macAddr, const uint8_t* data, int len);
 void formatMacAddress(const uint8_t* macAddr, char* info, int maxLength); 
 void sentCallBack(const uint8_t* macAddr, esp_now_send_status_t status);
+/* Interrupts routine */
+#ifdef M_0
+  void select_button();
+  void cancel_button();
+#endif
 /* Global functions */
 void Pin_Config();
 bool sent_to_all(const String &msg);
@@ -115,6 +121,7 @@ void loop()
       break;
 
     case IDLE:
+      delay(1);
       break;
 
     case WAIT:
@@ -132,7 +139,7 @@ void loop()
         st = BEGIN;
 
       } else {
-        lcd.clear();
+        //lcd.clear();
         lcd.print(F("Testando..."));
       }
       
@@ -164,21 +171,26 @@ void loop()
       break;
   
     case MENU:
-      pos[0] = 17; pos[1] = 23;
-
-      pot_sel = potSelect(POT, 2);
 
       if(old_pot != pot_sel)
       {
         lcd.setCursor(0,0);
         lcd.print(F("MANGUE AVR - 4x4"));
         lcd.setCursor(1,0);
-        lcd.print(F(" RUN  CONFIG"));
-        lcd.setCursor(pos[pot_sel] % 16, pos[pot_sel] / 16);
+        lcd.print(F(" RUN "));
         lcd.write('>');
         old_pot = pot_sel;
       }
 
+      if(B_SEL_CLICK)
+      {
+        delay(DEBOUCE_TIME);
+        st = RUN;
+
+        B_SEL_CLICK = false;
+      }
+      
+      /*
       if(!digitalRead(B_SEL))
       {
         delay(DEBOUCE_TIME);
@@ -187,7 +199,8 @@ void loop()
         st = pot_sel + RUN;
         old_pot = -1;
       }
-      
+      */
+
       break;
 
     case RUN:
@@ -209,6 +222,9 @@ void Pin_Config()
   pinMode(LED_BUILTIN, OUTPUT);
   pinMode(B_SEL, INPUT_PULLUP);
   pinMode(B_CANCEL, INPUT_PULLUP);
+
+  attachInterrupt(digitalPinToInterrupt(B_SEL), select_button, FALLING);
+  attachInterrupt(digitalPinToInterrupt(B_CANCEL), cancel_button, FALLING);
 
   return;
 }
@@ -363,4 +379,15 @@ char potSelect(uint8_t pin, uint8_t num_options)
   //    if (option >= num_options)
   //        option -= num_options;
   return option % num_options;
+}
+
+/* Interrupts routine */
+void select_button()
+{
+  B_SEL_CLICK = true;
+}
+
+void cancel_button()
+{
+  B_CANCEL_CLICK = true;
 }

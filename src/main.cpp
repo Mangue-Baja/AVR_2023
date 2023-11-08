@@ -18,14 +18,14 @@ esp_now_peer_info_t peerInfo;
 /* Global Variables */
 bool esp_now_ok = false;
 bool conf_30 = false, conf_100 = false;
-uint8_t AddressFor_0[] = { 0x40, 0x91, 0x51, 0xFB, 0xEA, 0x18 };
+uint8_t AddressFor_0[/*M_0 adress*/] = {0x40, 0x91, 0x51, 0xFB, 0xEA, 0x18}; // Each ESP32 have your Mac Adress
 
 /* Global Functions */
 void Pin_Config();
 /* ESP-NOW Functions */
 void receiveCallBack(const uint8_t* macAddr, const uint8_t* data, int len);
 void sentCallBack(const uint8_t* macAddr, esp_now_send_status_t status);
-void formatMacAddress(const uint8_t* MACAddr, char* info, int maxLength);
+void formatMacAddress(const uint8_t* macAddr, char* info, int maxLength);
 bool sent_to_all(const uint8_t msg);
 bool sent_to_single(const uint8_t msg);
 
@@ -110,14 +110,18 @@ void loop()
       }
 
       #if defined(M_30) || defined(M_100_101)
-        st=WAIT;
+        st = WAIT;
       #else
-        while(!esp_now_ok || !conf_30 || !conf_100)
+        do
         {
-          //Serial.printf("%d %d %d", esp_now_ok, conf_30, conf_100);
           sent_to_all(1);
-          delay(500);
-        }
+          delay(DEBOUCE_TIME);
+        } while(!esp_now_ok || !conf_30 || !conf_100);
+        
+
+        lcd.print(F("ESP-NOW ok!"));
+        delay(500);
+        lcd.clear();
 
         st = MENU;
         //(sent_to_all(1) ? st=WAIT : 0);
@@ -128,6 +132,7 @@ void loop()
       
     case WAIT:
     {
+      delay(50);
       break;
     }
 
@@ -159,24 +164,34 @@ void receiveCallBack(const uint8_t* macAddr, const uint8_t* data, int len)
   Serial.println(recv);
   Serial.println();
 
-  if(recv==1)
+
+  switch(recv)
   {
-    #ifdef M_30
-      //confirm_30 |= recv;
-      //(sent_to_single(1) ? confirm_30 << recv : 0);
-      sent_to_single(0);
-    #elif defined(M_100_101)
-      //confirm_100 |= recv;
-      //(sent_to_single(2) ? confirm_100 << recv : 0);
-      sent_to_single(2);
-    #endif
+    case 0:
+      conf_30 = true;
+      break;
+
+    case 1:
+
+      #ifdef M_30
+        //confirm_30 |= recv;
+        //(sent_to_single(1) ? confirm_30 << recv : 0);
+        sent_to_single(0);
+      #elif defined(M_100_101)
+        //confirm_100 |= recv;
+        //(sent_to_single(2) ? confirm_100 << recv : 0);
+        sent_to_single(2);
+      #endif
+
+      break;
+
+    case 2:
+      conf_100 = true;
+      break;
+    
+    default:
+      break;
   }
-
-  if(recv==0)
-    conf_30 = true;
-
-  if(recv==2)
-    conf_100 = true;
 }
 
 void sentCallBack(const uint8_t* macAddr, esp_now_send_status_t status) 
@@ -187,30 +202,24 @@ void sentCallBack(const uint8_t* macAddr, esp_now_send_status_t status)
 
   Serial.printf("Last packet sent to: %s\n", macStr);
   Serial.print("Last packet send status: ");
-  Serial.println(status == ESP_NOW_SEND_SUCCESS ? "Delivery Sucess" : "Delivery Failed");
-
-  if(status==ESP_NOW_SEND_SUCCESS)
-    esp_now_ok = true;
+  Serial.println(status==ESP_NOW_SEND_SUCCESS ? esp_now_ok |= 0x01 : esp_now_ok &= ~0x01);
 }
 
-void formatMacAddress(const uint8_t* MACAddr, char* info, int maxLength)
+void formatMacAddress(const uint8_t* macAddr, char* info, int maxLength)
 {
   // Formats MAC Address
-  snprintf(info, maxLength, "%02x:%02x:%02x:%02x:%02x:%02x", MACAddr[0], MACAddr[1], MACAddr[2], MACAddr[3], MACAddr[4], MACAddr[5]);
+  snprintf(info, maxLength, "%02x:%02x:%02x:%02x:%02x:%02x", macAddr[0], macAddr[1], macAddr[2], macAddr[3], macAddr[4], macAddr[5]);
 }
 
 bool sent_to_all(const uint8_t msg)
 {
   // Broadcast a message to every device in range
-  uint8_t BroadcastAdress[] = { 0xff, 0xff, 0xff, 0xff, 0xff, 0xff };
+  uint8_t BroadcastAdress[] = {0xff, 0xff, 0xff, 0xff, 0xff, 0xff};
   esp_now_peer_info_t BroadInfo = {};
 
   memcpy(&BroadInfo.peer_addr, BroadcastAdress, 6);
 
-  if(!esp_now_is_peer_exist(BroadcastAdress))
-  {
-    esp_now_add_peer(&BroadInfo);
-  }
+  if(!esp_now_is_peer_exist(BroadcastAdress)) { esp_now_add_peer(&BroadInfo); }
 
   // Send message
   esp_err_t result = esp_now_send(BroadcastAdress, (uint8_t *)&msg, sizeof(msg));

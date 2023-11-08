@@ -5,7 +5,7 @@
 
 #define DEBOUCE_TIME 150 
 
-typedef enum { INIT, WAIT, MENU } state; 
+typedef enum {INIT, WAIT, MENU} state; 
 
 uint8_t st = INIT;
 

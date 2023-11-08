@@ -3,14 +3,10 @@
 
 #include <Arduino.h>
 
-typedef enum {INIT, WAIT, IDLE, BEGIN, MENU, RUN, ST_30, ST_100_101} state;
+#define DEBOUCE_TIME 150 
+
+typedef enum { INIT, WAIT, MENU } state; 
 
 uint8_t st = INIT;
-
-uint8_t old_pot = -1, pot_sel = 0;
-uint8_t pos[4];
-
-bool listen_30 = false;
-bool listen_100_101 = false;
 
 #endif      

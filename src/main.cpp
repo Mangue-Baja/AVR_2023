@@ -14,14 +14,23 @@
 /* Libraries Variables */
 LiquidCrystal_I2C lcd(0x27, 16, 2); 
 esp_now_peer_info_t peerInfo;
+File data;
 
+/* Debug Variables */
+bool db = false;
+bool sel = false;
 /* Global Variables */
-bool esp_now_ok = false;
-bool conf_30 = false, conf_100 = false;
+char file_name[20];
+bool sd_exist = false;
 uint8_t AddressFor_0[/*M_0 adress*/] = {0x40, 0x91, 0x51, 0xFB, 0xEA, 0x18}; // Each ESP32 have your Mac Adress
 
+/* Interrupts Routine */
+void SelectISR();
 /* Global Functions */
 void Pin_Config();
+bool Mount_SD();
+void printRun();
+String format_time(unsigned long int t1);
 /* ESP-NOW Functions */
 void receiveCallBack(const uint8_t* macAddr, const uint8_t* data, int len);
 void sentCallBack(const uint8_t* macAddr, esp_now_send_status_t status);
@@ -42,7 +51,7 @@ void setup()
   Serial.println(WiFi.macAddress());
   /*
     * E1_0 = 40:91:51:FB:EA:18
-    * E2_30 = 40:91:51:FC:EA:CC
+    * E2_30 = A8:42:E3:C8:47:48
     * E3_100 = EC:62:60:9C:BD:DC
   */
 
@@ -116,6 +125,7 @@ void loop()
         {
           sent_to_all(1);
           delay(DEBOUCE_TIME);
+          //Serial.printf("%d %d %d\n", esp_now_ok, conf_30, conf_100);
         } while(!esp_now_ok || !conf_30 || !conf_100);
         
 
@@ -123,7 +133,7 @@ void loop()
         delay(500);
         lcd.clear();
 
-        st = MENU;
+        st = SD_BEGIN;
         //(sent_to_all(1) ? st=WAIT : 0);
       #endif
       
@@ -136,8 +146,101 @@ void loop()
       break;
     }
 
+    case SD_BEGIN:
+    {
+      (Mount_SD() ? sd_exist |= 0x01 : sd_exist &= ~0x01);
+
+      lcd.print(F((sd_exist ? "SD Instalado" : "Nao ha SD")));
+      delay(DEBOUCE_TIME*5);
+      lcd.clear();
+
+      st = MENU;
+      digitalWrite(LED_BUILTIN, LOW);
+
+      break;
+    }
+
     case MENU:
     {
+      if(pot_sel!=old_pot)
+      {
+        lcd.clear();
+        lcd.setCursor(0,0);
+        lcd.print(F("MANGUE AV - 4x4"));
+        lcd.setCursor(0,1);
+        lcd.print(F("   RUN"));
+        lcd.setCursor(0,1);
+        lcd.print(" ");
+        lcd.write('>');
+        old_pot = pot_sel;
+      }
+
+      if(sel)
+      {
+        delay(DEBOUCE_TIME);
+        lcd.clear();
+
+        t_30 = 0;
+        t_100 = 0;
+        t_101 = 0;
+        vel = 0;
+        t_curr = millis();
+        
+        old_pot = -1;
+        sel = false;
+        st = RUN;
+      }
+
+      /*
+      if(!digitalRead(B_SEL))
+      {
+        delay(DEBOUCE_TIME);
+        while(!digitalRead(B_SEL));
+
+        lcd.clear();
+
+        t_30 = 0;
+        t_100 = 0;
+        t_101 = 0;
+        vel = 0;
+        t_curr = millis();
+        
+        old_pot = -1;
+        st = RUN;
+      }
+      */
+
+      break;
+    }
+
+    case RUN:
+    {
+      if(!digitalRead(B_CAN))
+      {
+        delay(DEBOUCE_TIME);
+        while(!digitalRead(B_CAN));
+
+        st = MENU;
+        old_pot = -1;
+        sent_to_all(3);
+      }
+
+      switch(ss_r)
+      {
+        case START_:
+        {
+          t_30 = 0;
+          t_100 = 0;
+          t_101 = 0;
+          vel = 0;
+          str_vel = "00.00 km/h";
+
+          printRun();
+
+          break;
+        }
+      }
+      
       break;
     }
   }
@@ -147,6 +250,11 @@ void loop()
 void Pin_Config()
 {
   pinMode(LED_BUILTIN, OUTPUT);
+  #ifdef M_0
+    //pinMode(B_SEL, INPUT_PULLUP);
+    attachInterrupt(digitalPinToInterrupt(B_SEL), SelectISR, FALLING);
+    pinMode(B_CAN, INPUT_PULLUP);
+  #endif
 
   return;
 }
@@ -158,39 +266,36 @@ void receiveCallBack(const uint8_t* macAddr, const uint8_t* data, int len)
   uint8_t recv=0;
   
   memcpy(&recv, data, sizeof(data));
-  Serial.print("Data received: ");
-  Serial.println(len);
-  Serial.print("Message: ");
-  Serial.println(recv);
-  Serial.println();
+  //Serial.print("Data received: ");
+  //Serial.println(len);
+  //Serial.print("Message: ");
+  //Serial.println(recv);
+  //Serial.println();
 
-
-  switch(recv)
+  if(recv==0)
   {
-    case 0:
-      conf_30 = true;
-      break;
+    conf_30 = true;
+  }
 
-    case 1:
+  else if(recv==1)
+  {
+    #ifdef M_30
+      sent_to_single(0);
+    #endif
 
-      #ifdef M_30
-        //confirm_30 |= recv;
-        //(sent_to_single(1) ? confirm_30 << recv : 0);
-        sent_to_single(0);
-      #elif defined(M_100_101)
-        //confirm_100 |= recv;
-        //(sent_to_single(2) ? confirm_100 << recv : 0);
-        sent_to_single(2);
-      #endif
+    #ifdef M_100_101
+      sent_to_single(2);
+    #endif
+  }
 
-      break;
+  else if(recv==2)
+  {
+    conf_100 = true;
+  }
 
-    case 2:
-      conf_100 = true;
-      break;
-    
-    default:
-      break;
+  else if(recv==3)
+  {
+    digitalWrite(LED_BUILTIN, HIGH);
   }
 }
 
@@ -200,9 +305,11 @@ void sentCallBack(const uint8_t* macAddr, esp_now_send_status_t status)
   char macStr[18];
   formatMacAddress(macAddr, macStr, 18);
 
-  Serial.printf("Last packet sent to: %s\n", macStr);
-  Serial.print("Last packet send status: ");
-  Serial.println(status==ESP_NOW_SEND_SUCCESS ? esp_now_ok |= 0x01 : esp_now_ok &= ~0x01);
+  //Serial.printf("Last packet sent to: %s\n", macStr);
+  //Serial.print("Last packet send status: ");
+  //Serial.println(status==ESP_NOW_SEND_SUCCESS ? esp_now_ok |= 0x01 : esp_now_ok &= ~0x01);
+
+  (status==ESP_NOW_SEND_SUCCESS ? esp_now_ok |= 0x01 : esp_now_ok &= ~0x01);
 }
 
 void formatMacAddress(const uint8_t* macAddr, char* info, int maxLength)
@@ -232,4 +339,56 @@ bool sent_to_single(const uint8_t msg)
   esp_err_t result = esp_now_send(AddressFor_0, (uint8_t *)&msg, sizeof(msg));
 
   return result==ESP_OK ? true : false;
+}
+
+/* Global Functions */
+bool Mount_SD()
+{
+  if(!SD.begin(SD_CS)) { return false; }
+
+  File root = SD.open("/");
+  int CountFilesOnSD = 0;
+
+  while (true)
+  {
+    File entry = root.openNextFile();
+    // no more files
+    if(!entry) { break; }
+
+    // for each file count it
+    CountFilesOnSD++;
+    entry.close();
+  }
+
+  sprintf(file_name, "/%s%d.csv", "AV_data", CountFilesOnSD);
+
+  data = SD.open(file_name, FILE_APPEND);
+
+  return data ? true : false;
+}
+
+void printRun()
+{
+  str_30 = format_time(t_30);
+  str_100 = format_time(t_100);
+  str_101 = format_time(t_101);
+
+  lcd.setCursor(0,0);
+  lcd.print(' ' + str_30 + "  " + str_100 + "    ");
+  lcd.setCursor(0, 1);
+  lcd.print("   " + str_vel + "        ");
+}
+
+String format_time(unsigned long int t1)
+{
+  if(t1 < 10000)
+    return '0' + String(t1 / 1000) + ':' + String(t1 % 1000);
+  else
+    return String(t1 / 1000) + ':' + String(t1 % 1000);
+}
+
+/* Interrupts Routine */
+void SelectISR()
+{
+  sel = true;
 }

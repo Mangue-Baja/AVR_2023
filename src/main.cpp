@@ -2,13 +2,14 @@
 #include <esp_now.h>
 #include <WiFi.h>
 #include <SD.h>
+#include <Ticker.h>
 #include <LiquidCrystal_I2C.h>
 #include "soft_defs.h"
 #include "hard_defs.h"
 
 /* Defines type of ESP32 function */
-#define M_0
-//#define M_30
+//#define M_0
+#define M_30
 //#define M_100_101
 
 /* Libraries Variables */
@@ -17,26 +18,31 @@ esp_now_peer_info_t peerInfo;
 File data;
 
 /* Debug Variables */
-bool db = false;
-bool sel = false;
+Ticker ticker1Hz;
+uint8_t count = 0;
+bool interrupt = false;
+bool sel = true, err = true;
+unsigned long int curr = 0;
 /* Global Variables */
 char file_name[20];
 bool sd_exist = false;
 uint8_t AddressFor_0[/*M_0 adress*/] = {0x40, 0x91, 0x51, 0xFB, 0xEA, 0x18}; // Each ESP32 have your Mac Adress
 
 /* Interrupts Routine */
-void SelectISR();
+void ISR_30_100m();
+void tickeriHzISR();
 /* Global Functions */
 void Pin_Config();
 bool Mount_SD();
 void printRun();
 String format_time(unsigned long int t1);
+char potSelect(uint8_t pin, uint8_t num_options);
 /* ESP-NOW Functions */
 void receiveCallBack(const uint8_t* macAddr, const uint8_t* data, int len);
 void sentCallBack(const uint8_t* macAddr, esp_now_send_status_t status);
 void formatMacAddress(const uint8_t* macAddr, char* info, int maxLength);
 bool sent_to_all(const uint8_t msg);
-bool sent_to_single(const uint8_t msg);
+bool sent_to_single(const packet_t msg);
 
 void setup() 
 {
@@ -67,10 +73,11 @@ void setup()
 
 void loop() 
 {
-  switch(st)
+  switch(ss_t)
   {
     case INIT:
     {
+      lcd.print(F("Iniciando..."));
       if(esp_now_init()==ESP_OK)
       {
         //Serial.println("Init ESP_NOW Protocol");
@@ -106,6 +113,7 @@ void loop()
         //Serial.println("ESP-NOW init Failed!!");
         digitalWrite(LED_BUILTIN, HIGH);
 
+        lcd.clear();
         lcd.print("ESP-NOW ERROR");
         delay(2000);
         lcd.clear();
@@ -119,22 +127,23 @@ void loop()
       }
 
       #if defined(M_30) || defined(M_100_101)
-        st = WAIT;
+        ss_t = WAIT;
       #else
+
         do
         {
-          sent_to_all(1);
+          sent_to_all(packet.flag | 0x01); // send 1 how a flag
           delay(DEBOUCE_TIME);
           //Serial.printf("%d %d %d\n", esp_now_ok, conf_30, conf_100);
         } while(!esp_now_ok || !conf_30 || !conf_100);
         
-
+        lcd.clear();
         lcd.print(F("ESP-NOW ok!"));
         delay(500);
         lcd.clear();
 
-        st = SD_BEGIN;
-        //(sent_to_all(1) ? st=WAIT : 0);
+        ss_t = SD_BEGIN;
+        //(sent_to_all(1) ? ss_t=WAIT : 0);
       #endif
       
       break;
@@ -142,6 +151,9 @@ void loop()
       
     case WAIT:
     {
+      #ifndef M_0
+        detachInterrupt(digitalPinToInterrupt(SENSOR_30_100));
+      #endif
       delay(50);
       break;
     }
@@ -154,7 +166,7 @@ void loop()
       delay(DEBOUCE_TIME*5);
       lcd.clear();
 
-      st = MENU;
+      ss_t = MENU;
       digitalWrite(LED_BUILTIN, LOW);
 
       break;
@@ -175,23 +187,6 @@ void loop()
         old_pot = pot_sel;
       }
 
-      if(sel)
-      {
-        delay(DEBOUCE_TIME);
-        lcd.clear();
-
-        t_30 = 0;
-        t_100 = 0;
-        t_101 = 0;
-        vel = 0;
-        t_curr = millis();
-        
-        old_pot = -1;
-        sel = false;
-        st = RUN;
-      }
-
-      /*
       if(!digitalRead(B_SEL))
       {
         delay(DEBOUCE_TIME);
@@ -206,25 +201,29 @@ void loop()
         t_curr = millis();
         
         old_pot = -1;
-        st = RUN;
+        ss_t = RUN;
       }
-      */
 
       break;
     }
 
     case RUN:
     {
-      if(!digitalRead(B_CAN))
-      {
-        delay(DEBOUCE_TIME);
-        while(!digitalRead(B_CAN));
+      #ifdef M_0
+        if(!digitalRead(B_CAN))
+        {
+          delay(DEBOUCE_TIME);
+          while(!digitalRead(B_CAN));
 
-        st = MENU;
-        old_pot = -1;
-        sent_to_all(3);
-      }
-
+          ss_t = MENU;
+          ss_r = START_;
+          old_pot = -1;
+          sent_to_all(packet.flag | 0x03);
+        }
+      #else
+        //curr = millis();
+      #endif
+      
       switch(ss_r)
       {
         case START_:
@@ -234,8 +233,196 @@ void loop()
           t_101 = 0;
           vel = 0;
           str_vel = "00.00 km/h";
-
           printRun();
+
+          //Serial.println(digitalRead(SENSOR_ZERO));
+          if(!digitalRead(SENSOR_ZERO))
+          {
+            sent_to_all(packet.flag | 0x04);
+            ss_r = LCD_DISPLAY;
+            t_curr = millis();
+          }
+
+          break;
+        }
+
+        case LCD_DISPLAY:
+        {
+          while(ss_r==LCD_DISPLAY && sel /*|| err*/)
+          {
+            //(sel ? t_30 = millis() - t_curr : t_30);
+            //(err ? t_100 = millis() - t_curr : 0);
+            t_30 = millis() - t_curr;
+            t_100 = millis() - t_curr;
+            printRun();
+
+            if(!digitalRead(B_CAN))
+            {
+              delay(DEBOUCE_TIME);
+              while(!digitalRead(B_CAN));
+
+              ss_t = MENU;
+              ss_r = START_;
+              old_pot = -1;
+              sent_to_all(packet.flag | 0x03);
+            }
+          }
+          printRun();
+          //ss_r = END_RUN;
+
+          while(ss_r==LCD_DISPLAY && err)
+          {
+            t_100 = millis() - t_curr;
+            printRun();
+
+            if(!digitalRead(B_CAN))
+            {
+              delay(DEBOUCE_TIME);
+              while(!digitalRead(B_CAN));
+
+              ss_t = MENU;
+              ss_r = START_;
+              old_pot = -1;
+              sent_to_all(packet.flag | 0x03);
+            }
+          }
+          ss_r = END_RUN;
+
+          break;
+        }
+
+        case WAIT_30:
+        {
+          //ticker1Hz.attach(1.0, tickeriHzISR);
+          attachInterrupt(digitalPinToInterrupt(SENSOR_30_100), ISR_30_100m, FALLING);
+          //while(ss_r==WAIT_30 && !interrupt && count<2)
+          //{
+          //  packet.tt_30 = millis() - curr;  
+          //  Serial.println(packet.tt_30);
+          //}
+          
+          while(!interrupt) Serial.println(count);
+          if(interrupt)
+          {
+            //Serial.println("hammm");
+            packet.flag |= 0x05;
+            sent_to_single(packet);
+
+            /* Reset the packet message */
+            packet.tt_30 = 0;
+            packet.flag &= ~0x05;
+            interrupt = false;
+            ss_t = WAIT;
+            //ss_r = START_;
+          }
+          
+          break;
+        }
+
+        case WAIT_100:
+        {
+          attachInterrupt(digitalPinToInterrupt(SENSOR_30_100), ISR_30_100m, FALLING);
+          while(ss_r==WAIT_100 && !interrupt)
+          {
+            packet.tt_100 = millis() - curr;
+          }
+
+          while(digitalRead(SENSOR_101)) packet.tt_101 = millis() - curr;  
+          if(digitalRead(SENSOR_101)) packet.tt_101 = millis() - curr;
+
+          packet.flag |= 0x06;
+          sent_to_single(packet);
+
+          /* Reset the packet message */
+          packet.tt_100 = 0;
+          packet.tt_101 = 0;
+          packet.flag &= ~0x06;
+          interrupt = false;
+          ss_t = WAIT;
+          //ss_r = START
+
+          break;
+        }
+
+        case END_RUN:
+        {
+          if(vel==0)
+          {
+            vel = (double)((t_101-t_100)/1000.0);
+            vel = (double)(3.6/vel);
+            str_vel = String(vel, 2) + "km/h";
+          }
+          printRun();
+
+          if(!digitalRead(B_SEL))
+          {
+            delay(DEBOUCE_TIME);
+            while(!digitalRead(B_SEL));
+            ss_r = SAVE_RUN;
+            lcd.clear();
+            delay(DEBOUCE_TIME);
+          }
+
+          break;
+        }
+
+        case SAVE_RUN:
+        {
+          if(sd_exist)
+          {
+            pos[0] = 17; pos[1] = 24;
+            pot_sel = potSelect(POT, 2);
+
+            if (pot_sel != old_pot)
+            {
+              lcd.setCursor(0, 0);
+              lcd.print(F(" DESEJA SALVAR? "));
+              lcd.setCursor(0, 1);
+              lcd.print(F("   SIM    NAO   "));
+              lcd.setCursor(pos[pot_sel] % 16, (int)pos[pot_sel] / 16);
+              lcd.write('>');
+              old_pot = pot_sel;
+            }
+
+            if(!digitalRead(B_SEL))
+            {
+              if(pot_sel==0)
+              {
+                lcd.print(F("  Salvando...  "));
+                data = SD.open(file_name, FILE_APPEND);
+
+                if(data)
+                {
+                  data.printf("%d,%d,%d\n", t_30, t_100, vel);
+                  data.close();
+                } 
+              }
+
+              else
+              {
+                lcd.print(F("Voltando"));
+                delay(DEBOUCE_TIME*3);
+                lcd.clear();
+              }
+
+              old_pot = -1;
+              ss_t = MENU;
+              ss_r = START_; 
+              sent_to_all(packet.flag | 0x03);
+            }
+          }
+
+          else
+          {
+            lcd.print(F("Nao ha SD"));
+            delay(DEBOUCE_TIME*3);
+            lcd.clear();
+
+            old_pot = -1;
+            ss_t = MENU;
+            ss_r = START_;
+            sent_to_all(packet.flag | 0x03);
+          }
 
           break;
         }
@@ -251,9 +438,10 @@ void Pin_Config()
 {
   pinMode(LED_BUILTIN, OUTPUT);
   #ifdef M_0
-    //pinMode(B_SEL, INPUT_PULLUP);
-    attachInterrupt(digitalPinToInterrupt(B_SEL), SelectISR, FALLING);
+    pinMode(B_SEL, INPUT_PULLUP);
+    //attachInterrupt(digitalPinToInterrupt(B_SEL), SelectISR, FALLING);
     pinMode(B_CAN, INPUT_PULLUP);
+    pinMode(SENSOR_ZERO, INPUT);
   #endif
 
   return;
@@ -263,39 +451,83 @@ void Pin_Config()
 void receiveCallBack(const uint8_t* macAddr, const uint8_t* data, int len)
 {
   // Called when data is received
-  uint8_t recv=0;
+  packet_t recv;
   
-  memcpy(&recv, data, sizeof(data));
-  //Serial.print("Data received: ");
-  //Serial.println(len);
-  //Serial.print("Message: ");
-  //Serial.println(recv);
-  //Serial.println();
+  memcpy(&recv, data, sizeof(packet_t));
+  Serial.print("Data received: ");
+  Serial.println(len);
+  Serial.print("Message: ");
+  Serial.println(recv.flag);
+  Serial.println();
 
-  if(recv==0)
+  if(recv.flag==0)
   {
     conf_30 = true;
   }
 
-  else if(recv==1)
+  else if(recv.flag==1)
   {
     #ifdef M_30
-      sent_to_single(0);
+      packet.flag = recv.flag & packet.flag;
+      sent_to_single(packet);
+
+      /* Reset flag */
+      packet.flag = 0x00;
     #endif
 
     #ifdef M_100_101
-      sent_to_single(2);
+      packet.flag = recv.flag << 1;
+      sent_to_single(packet);
+
+      /* Reset Flag */
+      packet.flag &= ~0x02;
     #endif
   }
 
-  else if(recv==2)
+  else if(recv.flag==2)
   {
     conf_100 = true;
   }
 
-  else if(recv==3)
+  else if(recv.flag==3)
   {
+    ss_t = MENU;
+    ss_r = WAIT; 
+
+    #ifndef M_0
+      packet.tt_30 = 0;
+      packet.tt_100 = 0;
+      packet.tt_101 = 0;
+    #endif
+  }
+
+  else if(recv.flag==4)
+  {
+    #ifdef M_30
+      ss_t = RUN;
+      ss_r = WAIT_30;
+    #elif defined(M_100_101)
+      ss_t = RUN;
+      ss_r = WAIT_100;
+    #endif
+  }
+
+  else if(recv.flag==5)
+  {
+    t_30 = millis() - t_curr;
+    //packet.tt_30 = recv.tt_30;
     digitalWrite(LED_BUILTIN, HIGH);
+    //Serial.println(packet.tt_30);
+    Serial.println((float)t_30/1000);
+    sel = false;
+  }
+
+  else if(recv.flag==6)
+  {
+    t_100 = recv.tt_100;
+    t_101 = recv.tt_101;
+    ss_r = END_RUN;
+    err = false;
   }
 }
 
@@ -334,7 +566,7 @@ bool sent_to_all(const uint8_t msg)
   return result==ESP_OK ? true : false;
 }
 
-bool sent_to_single(const uint8_t msg)
+bool sent_to_single(const packet_t msg)
 {
   esp_err_t result = esp_now_send(AddressFor_0, (uint8_t *)&msg, sizeof(msg));
 
@@ -349,7 +581,7 @@ bool Mount_SD()
   File root = SD.open("/");
   int CountFilesOnSD = 0;
 
-  while (true)
+  while(true)
   {
     File entry = root.openNextFile();
     // no more files
@@ -364,7 +596,17 @@ bool Mount_SD()
 
   data = SD.open(file_name, FILE_APPEND);
 
-  return data ? true : false;
+  if(data)
+  {
+    data.close();
+
+    return true;
+  }
+
+  else
+  {
+    return false;
+  }
 }
 
 void printRun()
@@ -387,8 +629,40 @@ String format_time(unsigned long int t1)
     return String(t1 / 1000) + ':' + String(t1 % 1000);
 }
 
-/* Interrupts Routine */
-void SelectISR()
+char potSelect(uint8_t pin, uint8_t num_options)
 {
-  sel = true;
+  uint16_t read_val = analogRead(pin);
+  uint8_t option = map(read_val, 50, 1000, 0, 2*num_options-1);
+  //    if (option >= num_options)
+  //        option -= num_options;
+  return option % num_options;
+}
+
+/* Interrupts Routine */
+void ISR_30_100m()
+{
+  if(ss_r==WAIT_30)
+  {
+    //packet.tt_30 = millis() - curr;
+  }
+
+  else
+  {
+    packet.tt_100 = millis() - curr;
+  }
+  interrupt = true;
+  detachInterrupt(digitalPinToInterrupt(SENSOR_30_100));
+}
+
+void tickeriHzISR()
+{
+  count++;
+  //Serial.println(count);
+
+  if(count==3)
+  {
+    count = 0;
+    interrupt = true;
+    ticker1Hz.detach();
+  }
 }

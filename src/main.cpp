@@ -17,7 +17,6 @@ esp_now_peer_info_t peerInfo;
 File data;
 
 /* Debug Variables */
-uint8_t count = 0;
 bool interrupt = false;
 bool ignore = false;
 bool sel = true, err = true;
@@ -152,7 +151,7 @@ void loop()
       #ifndef M_0
         detachInterrupt(digitalPinToInterrupt(SENSOR_30_100));
         t_101 = 0;
-        vel = 0;
+        //vel = 0;
       #endif
       delay(50);
       break;
@@ -190,10 +189,9 @@ void loop()
       if(!digitalRead(B_SEL))
       {
         delay(DEBOUCE_TIME);
-        //while(!digitalRead(B_SEL));
+        while(!digitalRead(B_SEL));
 
         lcd.clear();
-
         t_30 = 0;
         t_100 = 0;
         t_101 = 0;
@@ -238,7 +236,7 @@ void loop()
           printRun();
 
           //Serial.println(digitalRead(SENSOR_ZERO));
-          if(!digitalRead(SENSOR_ZERO))
+          if(digitalRead(SENSOR_ZERO))
           {
             sent_to_all(flag | 0x04);
             ss_r = LCD_DISPLAY;
@@ -290,7 +288,7 @@ void loop()
           //ss_r = END_RUN;
           while(ss_r!=END_RUN)
           {
-            delay(1);
+            delay(DEBOUCE_TIME/10);
             //if(!digitalRead(B_SEL))
             //{
             //  delay(DEBOUCE_TIME);
@@ -315,8 +313,6 @@ void loop()
           //  Serial.println(packet.tt_30);
           //}
           
-          delay(3000);
-          interrupt = true;
           while(!interrupt) delay(1);
           if(interrupt)
           {
@@ -343,27 +339,22 @@ void loop()
             //packet.tt_100 = millis() - curr;
           //}
 
-          delay(6000);
-          interrupt = true;
           while(!interrupt) delay(1);
           if(interrupt)
           {
             sent_to_single(flag | 0x06);  
 
-            delay(1000);
-
-            while(digitalRead(SENSOR_101)) 
+            while(!digitalRead(SENSOR_101)) 
               t_101 = millis() - curr;
-            if(!digitalRead(SENSOR_101)) 
+            if(digitalRead(SENSOR_101)) 
               t_101 = millis() - curr;
 
-            t_101 += 800;
             //memcpy(&teste, (uint16_t *)&speed, sizeof(uint16_t));
 
             while(t_101>0xff)
             {
               sent_to_single(0xff);
-              delay(50);
+              delay(DEBOUCE_TIME/10);
               t_101 -= 0xff;
             }
             sent_to_single((uint8_t)t_101);
@@ -412,13 +403,13 @@ void loop()
             pos[0] = 17; pos[1] = 24;
             pot_sel = potSelect(POT, 2);
 
-            if (pot_sel != old_pot)
+            if(pot_sel!=old_pot)
             {
               lcd.setCursor(0, 0);
               lcd.print(F(" DESEJA SALVAR? "));
               lcd.setCursor(0, 1);
               lcd.print(F("   SIM    NAO   "));
-              lcd.setCursor(pos[pot_sel] % 16, (int)pos[pot_sel] / 16);
+              lcd.setCursor(pos[pot_sel]%16, (int)pos[pot_sel]/16);
               lcd.write('>');
               old_pot = pot_sel;
             }
@@ -520,14 +511,14 @@ void receiveCallBack(const uint8_t* macAddr, const uint8_t* data, int len)
     {
       #ifdef M_30
         sent_to_single(recv & ~0x01);
-
+        ss_t = WAIT;
         /* Reset flag */
         //packet.flag = 0x00;
       #endif
 
       #ifdef M_100_101
         sent_to_single(recv << 1);
-
+        ss_t = WAIT;
         /* Reset Flag */
         //packet.flag &= ~(recv.flag << 1);
       #endif

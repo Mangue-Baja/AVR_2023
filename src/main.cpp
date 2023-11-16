@@ -2,14 +2,13 @@
 #include <esp_now.h>
 #include <WiFi.h>
 #include <SD.h>
-#include <Ticker.h>
 #include <LiquidCrystal_I2C.h>
 #include "soft_defs.h"
 #include "hard_defs.h"
 
 /* Defines type of ESP32 function */
-//#define M_0
-#define M_30
+#define M_0
+//#define M_30
 //#define M_100_101
 
 /* Libraries Variables */
@@ -18,9 +17,9 @@ esp_now_peer_info_t peerInfo;
 File data;
 
 /* Debug Variables */
-Ticker ticker1Hz;
 uint8_t count = 0;
 bool interrupt = false;
+bool ignore = false;
 bool sel = true, err = true;
 unsigned long int curr = 0;
 /* Global Variables */
@@ -30,7 +29,6 @@ uint8_t AddressFor_0[/*M_0 adress*/] = {0x40, 0x91, 0x51, 0xFB, 0xEA, 0x18}; // 
 
 /* Interrupts Routine */
 void ISR_30_100m();
-void tickeriHzISR();
 /* Global Functions */
 void Pin_Config();
 bool Mount_SD();
@@ -42,7 +40,7 @@ void receiveCallBack(const uint8_t* macAddr, const uint8_t* data, int len);
 void sentCallBack(const uint8_t* macAddr, esp_now_send_status_t status);
 void formatMacAddress(const uint8_t* macAddr, char* info, int maxLength);
 bool sent_to_all(const uint8_t msg);
-bool sent_to_single(const packet_t msg);
+bool sent_to_single(const uint8_t msg);
 
 void setup() 
 {
@@ -132,7 +130,7 @@ void loop()
 
         do
         {
-          sent_to_all(packet.flag | 0x01); // send 1 how a flag
+          sent_to_all(flag | 0x01); // send 1 how a flag
           delay(DEBOUCE_TIME);
           //Serial.printf("%d %d %d\n", esp_now_ok, conf_30, conf_100);
         } while(!esp_now_ok || !conf_30 || !conf_100);
@@ -153,6 +151,8 @@ void loop()
     {
       #ifndef M_0
         detachInterrupt(digitalPinToInterrupt(SENSOR_30_100));
+        t_101 = 0;
+        vel = 0;
       #endif
       delay(50);
       break;
@@ -190,7 +190,7 @@ void loop()
       if(!digitalRead(B_SEL))
       {
         delay(DEBOUCE_TIME);
-        while(!digitalRead(B_SEL));
+        //while(!digitalRead(B_SEL));
 
         lcd.clear();
 
@@ -204,26 +204,28 @@ void loop()
         ss_t = RUN;
       }
 
+      //Serial.println(ss_t);
       break;
     }
 
     case RUN:
     {
+      //Serial.println(ss_t);
       #ifdef M_0
-        if(!digitalRead(B_CAN))
-        {
-          delay(DEBOUCE_TIME);
-          while(!digitalRead(B_CAN));
+        //if(!digitalRead(B_CAN))
+        //{
+        //  delay(DEBOUCE_TIME);
+        //  while(!digitalRead(B_CAN));
 
-          ss_t = MENU;
-          ss_r = START_;
-          old_pot = -1;
-          sent_to_all(packet.flag | 0x03);
-        }
+        //  ss_t = MENU;
+        //  ss_r = START_;
+        //  old_pot = -1;
+        //  sent_to_all(flag | 0x03);
+        //}
       #else
-        //curr = millis();
+        curr = millis();
       #endif
-      
+
       switch(ss_r)
       {
         case START_:
@@ -238,7 +240,7 @@ void loop()
           //Serial.println(digitalRead(SENSOR_ZERO));
           if(!digitalRead(SENSOR_ZERO))
           {
-            sent_to_all(packet.flag | 0x04);
+            sent_to_all(flag | 0x04);
             ss_r = LCD_DISPLAY;
             t_curr = millis();
           }
@@ -256,16 +258,15 @@ void loop()
             t_100 = millis() - t_curr;
             printRun();
 
-            if(!digitalRead(B_CAN))
-            {
-              delay(DEBOUCE_TIME);
-              while(!digitalRead(B_CAN));
-
-              ss_t = MENU;
-              ss_r = START_;
-              old_pot = -1;
-              sent_to_all(packet.flag | 0x03);
-            }
+            //if(!digitalRead(B_CAN))
+            //{
+            //  delay(DEBOUCE_TIME);
+            //  while(!digitalRead(B_CAN));
+            //  ss_t = MENU;
+            //  ss_r = START_;
+            //  old_pot = -1;
+            //  sent_to_all(flag | 0x03);
+            //}
           }
           printRun();
           //ss_r = END_RUN;
@@ -275,25 +276,38 @@ void loop()
             t_100 = millis() - t_curr;
             printRun();
 
-            if(!digitalRead(B_CAN))
-            {
-              delay(DEBOUCE_TIME);
-              while(!digitalRead(B_CAN));
+            //if(!digitalRead(B_CAN))
+            //{
+            //  delay(DEBOUCE_TIME);
+            //  while(!digitalRead(B_CAN));
 
-              ss_t = MENU;
-              ss_r = START_;
-              old_pot = -1;
-              sent_to_all(packet.flag | 0x03);
-            }
+            //  ss_t = MENU;
+            //  ss_r = START_;
+            //  old_pot = -1;
+            //  sent_to_all(flag | 0x03);
+            //}
           }
-          ss_r = END_RUN;
+          //ss_r = END_RUN;
+          while(ss_r!=END_RUN)
+          {
+            delay(1);
+            //if(!digitalRead(B_SEL))
+            //{
+            //  delay(DEBOUCE_TIME);
+            //  while(!digitalRead(B_SEL));
+            //  ss_t = MENU;
+            //  ss_r = START_;
+            //  lcd.clear();
+            //  delay(DEBOUCE_TIME);
+            //}
+          }
+          printRun();
 
           break;
         }
 
         case WAIT_30:
         {
-          //ticker1Hz.attach(1.0, tickeriHzISR);
           attachInterrupt(digitalPinToInterrupt(SENSOR_30_100), ISR_30_100m, FALLING);
           //while(ss_r==WAIT_30 && !interrupt && count<2)
           //{
@@ -301,16 +315,18 @@ void loop()
           //  Serial.println(packet.tt_30);
           //}
           
-          while(!interrupt) Serial.println(count);
+          delay(3000);
+          interrupt = true;
+          while(!interrupt) delay(1);
           if(interrupt)
           {
             //Serial.println("hammm");
-            packet.flag |= 0x05;
-            sent_to_single(packet);
+            //packet.flag |= 0x05;
+            sent_to_single(flag | 0x05);
 
             /* Reset the packet message */
-            packet.tt_30 = 0;
-            packet.flag &= ~0x05;
+            //packet.tt_30 = 0;
+            //packet.flag &= ~0x05;
             interrupt = false;
             ss_t = WAIT;
             //ss_r = START_;
@@ -322,24 +338,48 @@ void loop()
         case WAIT_100:
         {
           attachInterrupt(digitalPinToInterrupt(SENSOR_30_100), ISR_30_100m, FALLING);
-          while(ss_r==WAIT_100 && !interrupt)
+          //while(ss_r==WAIT_100 && !interrupt)
+          //{
+            //packet.tt_100 = millis() - curr;
+          //}
+
+          delay(6000);
+          interrupt = true;
+          while(!interrupt) delay(1);
+          if(interrupt)
           {
-            packet.tt_100 = millis() - curr;
+            sent_to_single(flag | 0x06);  
+
+            delay(1000);
+
+            while(digitalRead(SENSOR_101)) 
+              t_101 = millis() - curr;
+            if(!digitalRead(SENSOR_101)) 
+              t_101 = millis() - curr;
+
+            t_101 += 800;
+            //memcpy(&teste, (uint16_t *)&speed, sizeof(uint16_t));
+
+            while(t_101>0xff)
+            {
+              sent_to_single(0xff);
+              delay(50);
+              t_101 -= 0xff;
+            }
+            sent_to_single((uint8_t)t_101);
+            t_101 = 0;
+            interrupt = false;
+            ss_t = WAIT;
+            //ss_r = START_;
           }
 
-          while(digitalRead(SENSOR_101)) packet.tt_101 = millis() - curr;  
-          if(digitalRead(SENSOR_101)) packet.tt_101 = millis() - curr;
-
-          packet.flag |= 0x06;
-          sent_to_single(packet);
+          //packet.flag |= 0x06;
+          //sent_to_single(packet);
 
           /* Reset the packet message */
-          packet.tt_100 = 0;
-          packet.tt_101 = 0;
-          packet.flag &= ~0x06;
-          interrupt = false;
-          ss_t = WAIT;
-          //ss_r = START
+          //packet.tt_100 = 0;
+          //packet.tt_101 = 0;
+          //packet.flag &= ~0x06;
 
           break;
         }
@@ -348,7 +388,7 @@ void loop()
         {
           if(vel==0)
           {
-            vel = (double)((t_101-t_100)/1000.0);
+            vel = (double)((time_101-t_100)/1000.0);
             vel = (double)(3.6/vel);
             str_vel = String(vel, 2) + "km/h";
           }
@@ -359,8 +399,7 @@ void loop()
             delay(DEBOUCE_TIME);
             while(!digitalRead(B_SEL));
             ss_r = SAVE_RUN;
-            lcd.clear();
-            delay(DEBOUCE_TIME);
+            delay(100);
           }
 
           break;
@@ -408,7 +447,7 @@ void loop()
               old_pot = -1;
               ss_t = MENU;
               ss_r = START_; 
-              sent_to_all(packet.flag | 0x03);
+              sent_to_all(flag | 0x03);
             }
           }
 
@@ -421,7 +460,7 @@ void loop()
             old_pot = -1;
             ss_t = MENU;
             ss_r = START_;
-            sent_to_all(packet.flag | 0x03);
+            sent_to_all(flag | 0x03);
           }
 
           break;
@@ -440,8 +479,18 @@ void Pin_Config()
   #ifdef M_0
     pinMode(B_SEL, INPUT_PULLUP);
     //attachInterrupt(digitalPinToInterrupt(B_SEL), SelectISR, FALLING);
-    pinMode(B_CAN, INPUT_PULLUP);
+    //pinMode(B_CAN, INPUT_PULLUP);
+    pinMode(B_CAN, INPUT);
     pinMode(SENSOR_ZERO, INPUT);
+  #endif
+
+  #ifdef M_30
+    attachInterrupt(digitalPinToInterrupt(SENSOR_30_100), ISR_30_100m, FALLING);
+  #endif
+
+  #ifdef M_100_101
+    attachInterrupt(digitalPinToInterrupt(SENSOR_30_100), ISR_30_100m, FALLING);
+    pinMode(SENSOR_101, INPUT);
   #endif
 
   return;
@@ -451,83 +500,94 @@ void Pin_Config()
 void receiveCallBack(const uint8_t* macAddr, const uint8_t* data, int len)
 {
   // Called when data is received
-  packet_t recv;
+  uint8_t recv;
   
-  memcpy(&recv, data, sizeof(packet_t));
-  Serial.print("Data received: ");
-  Serial.println(len);
-  Serial.print("Message: ");
-  Serial.println(recv.flag);
-  Serial.println();
+  memcpy(&recv, data, sizeof(int));
+  //Serial.print("Data received: ");
+  //Serial.println(len);
+  //Serial.print("Message: ");
+  //Serial.println(recv);
+  //Serial.println();
 
-  if(recv.flag==0)
+  if(!ignore)
   {
-    conf_30 = true;
+    if(recv==0)
+    {
+      conf_30 = true;
+    }
+
+    else if(recv==1)
+    {
+      #ifdef M_30
+        sent_to_single(recv & ~0x01);
+
+        /* Reset flag */
+        //packet.flag = 0x00;
+      #endif
+
+      #ifdef M_100_101
+        sent_to_single(recv << 1);
+
+        /* Reset Flag */
+        //packet.flag &= ~(recv.flag << 1);
+      #endif
+    }
+
+    else if(recv==2)
+    {
+      conf_100 = true;
+    }
+
+    else if(recv==3)
+    {
+      ss_t = WAIT;
+      //ss_r = WAIT; 
+    }
+
+    else if(recv==4)
+    {
+      #ifdef M_30
+        ss_t = RUN;
+        ss_r = WAIT_30;
+      #endif
+
+      #ifdef M_100_101 
+        t_101 = 0;
+        ss_t = RUN;
+        ss_r = WAIT_100;
+      #endif
+    }
+
+    else if(recv==5)
+    {
+      //t_30 = millis() - t_curr;
+      //packet.tt_30 = recv.tt_30;
+      //digitalWrite(LED_BUILTIN, HIGH);
+      //Serial.println(packet.tt_30);
+      //Serial.println((float)t_30/1000);
+      sel = false;
+    }
+
+    else if(recv==6)
+    {
+      //t_100 = recv.tt_100;
+      //t_101 = recv.tt_101;
+      //ss_r = END_RUN;
+      err = false;
+      ignore = true;
+    }
   }
 
-  else if(recv.flag==1)
+  else
   {
-    #ifdef M_30
-      packet.flag = recv.flag & packet.flag;
-      sent_to_single(packet);
+    time_101 += recv;
+    //Serial.println(time_101);
 
-      /* Reset flag */
-      packet.flag = 0x00;
-    #endif
-
-    #ifdef M_100_101
-      packet.flag = recv.flag << 1;
-      sent_to_single(packet);
-
-      /* Reset Flag */
-      packet.flag &= ~0x02;
-    #endif
-  }
-
-  else if(recv.flag==2)
-  {
-    conf_100 = true;
-  }
-
-  else if(recv.flag==3)
-  {
-    ss_t = MENU;
-    ss_r = WAIT; 
-
-    #ifndef M_0
-      packet.tt_30 = 0;
-      packet.tt_100 = 0;
-      packet.tt_101 = 0;
-    #endif
-  }
-
-  else if(recv.flag==4)
-  {
-    #ifdef M_30
-      ss_t = RUN;
-      ss_r = WAIT_30;
-    #elif defined(M_100_101)
-      ss_t = RUN;
-      ss_r = WAIT_100;
-    #endif
-  }
-
-  else if(recv.flag==5)
-  {
-    t_30 = millis() - t_curr;
-    //packet.tt_30 = recv.tt_30;
-    digitalWrite(LED_BUILTIN, HIGH);
-    //Serial.println(packet.tt_30);
-    Serial.println((float)t_30/1000);
-    sel = false;
-  }
-
-  else if(recv.flag==6)
-  {
-    t_100 = recv.tt_100;
-    t_101 = recv.tt_101;
-    ss_r = END_RUN;
-    err = false;
+    if(recv!=0xff)
+    {
+      ss_r = END_RUN;
+      ignore = false;
+    }    
   }
 }
 
@@ -535,7 +595,7 @@ void sentCallBack(const uint8_t* macAddr, esp_now_send_status_t status)
 {
   // Called when data is sent
   char macStr[18];
-  formatMacAddress(macAddr, macStr, 18);
+  //formatMacAddress(macAddr, macStr, 18);
 
   //Serial.printf("Last packet sent to: %s\n", macStr);
   //Serial.print("Last packet send status: ");
@@ -566,7 +626,7 @@ bool sent_to_all(const uint8_t msg)
   return result==ESP_OK ? true : false;
 }
 
-bool sent_to_single(const packet_t msg)
+bool sent_to_single(const uint8_t msg)
 {
   esp_err_t result = esp_now_send(AddressFor_0, (uint8_t *)&msg, sizeof(msg));
 
@@ -648,21 +708,9 @@ void ISR_30_100m()
 
   else
   {
-    packet.tt_100 = millis() - curr;
+    //packet.tt_100 = millis() - curr;
   }
+  
   interrupt = true;
   detachInterrupt(digitalPinToInterrupt(SENSOR_30_100));
-}
-
-void tickeriHzISR()
-{
-  count++;
-  //Serial.println(count);
-
-  if(count==3)
-  {
-    count = 0;
-    interrupt = true;
-    ticker1Hz.detach();
-  }
 }

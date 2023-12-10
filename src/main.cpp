@@ -24,7 +24,8 @@ unsigned long int curr = 0;
 /* Global Variables */
 char file_name[20];
 bool sd_exist = false;
-uint8_t AddressFor_0[/*M_0 adress*/] = {0x40, 0x91, 0x51, 0xFB, 0xEA, 0x18}; // Each ESP32 have your Mac Adress
+const uint8_t AddressFor_0[/*M_0 adress*/] = {0x40, 0x91, 0x51, 0xFB, 0xEA, 0x18}; // Each ESP32 have your Mac Adress
+AVR_SENT AVR(AddressFor_0);
 
 /* Interrupts Routine */
 void ISR_30_100m();
@@ -37,9 +38,6 @@ char potSelect(uint8_t pin, uint8_t num_options);
 /* ESP-NOW Functions */
 void receiveCallBack(const uint8_t* macAddr, const uint8_t* data, int len);
 void sentCallBack(const uint8_t* macAddr, esp_now_send_status_t status);
-void formatMacAddress(const uint8_t* macAddr, char* info, int maxLength);
-bool sent_to_all(const uint8_t msg);
-bool sent_to_single(const uint8_t msg);
 
 void setup() 
 {
@@ -85,15 +83,12 @@ void loop()
 
         #if defined(M_30) || defined(M_100_101)
           // Register peer
-          memcpy(peerInfo.peer_addr, AddressFor_0, 6);
-          peerInfo.channel = 0;
-          peerInfo.encrypt = false;
-
-          // Add peer
-          if(esp_now_add_peer(&peerInfo)!=ESP_OK)
+          int ss = AVR.Register_Peer(peerInfo);
+          
+          if(ss==-1)
           {
-            Serial.println("Failed to add peer");
-            return;
+            Serial.print("Add peer error!!!!")
+            while(1);
           }
         #endif
 
@@ -129,7 +124,8 @@ void loop()
 
         do
         {
-          sent_to_all(flag | 0x01); // send 1 how a flag
+          // Sent to All
+          AVR.Sent_Data(flag | 0x01); // send 1 how a flag
           delay(DEBOUCE_TIME);
           //Serial.printf("%d %d %d\n", esp_now_ok, conf_30, conf_100);
         } while(!esp_now_ok || !conf_30 || !conf_100);
@@ -140,7 +136,9 @@ void loop()
         lcd.clear();
 
         ss_t = SD_BEGIN;
-        //(sent_to_all(1) ? ss_t=WAIT : 0);
+
+        // Sent to all
+        //(AVR.Sent_Data(1) ? ss_t=WAIT : 0);
       #endif
       
       break;
@@ -218,7 +216,8 @@ void loop()
         //  ss_t = MENU;
         //  ss_r = START_;
         //  old_pot = -1;
-        //  sent_to_all(flag | 0x03);
+        // Sent to all
+        //  AVR.Sent_Data(flag | 0x03);
         //}
       #else
         curr = millis();
@@ -238,7 +237,8 @@ void loop()
           //Serial.println(digitalRead(SENSOR_ZERO));
           if(digitalRead(SENSOR_ZERO))
           {
-            sent_to_all(flag | 0x04);
+            // Sent to all
+            AVR.Sent_Data(flag | 0x04);
             ss_r = LCD_DISPLAY;
             t_curr = millis();
           }
@@ -263,7 +263,8 @@ void loop()
             //  ss_t = MENU;
             //  ss_r = START_;
             //  old_pot = -1;
-            //  sent_to_all(flag | 0x03);
+            // Sent to all
+            //  AVR.Sent_Data(flag | 0x03);
             //}
           }
           printRun();
@@ -282,7 +283,8 @@ void loop()
             //  ss_t = MENU;
             //  ss_r = START_;
             //  old_pot = -1;
-            //  sent_to_all(flag | 0x03);
+            // Sent to all
+            //  AVR.Sent_Data(flag | 0x03);
             //}
           }
           //ss_r = END_RUN;
@@ -318,7 +320,8 @@ void loop()
           {
             //Serial.println("hammm");
             //packet.flag |= 0x05;
-            sent_to_single(flag | 0x05);
+            // Sent to single
+            AVR.Sent_Data(flag | 0x05, peerInfo, 1);
 
             /* Reset the packet message */
             //packet.tt_30 = 0;
@@ -342,7 +345,8 @@ void loop()
           while(!interrupt) delay(1);
           if(interrupt)
           {
-            sent_to_single(flag | 0x06);  
+            // Sent to single
+            AVR.Sent_Data(flag | 0x06, peerInfo, 1);;  
 
             while(!digitalRead(SENSOR_101)) 
               t_101 = millis() - curr;
@@ -353,11 +357,13 @@ void loop()
 
             while(t_101>0xff)
             {
-              sent_to_single(0xff);
+              // Sent to single
+              AVR.Sent_Data(0xff, peerInfo, 1);
               delay(DEBOUCE_TIME/10);
               t_101 -= 0xff;
             }
-            sent_to_single((uint8_t)t_101);
+            // Sent to single
+            AVR.Sent_Data((uint8_t)t_101, peerInfo, 1);
             t_101 = 0;
             interrupt = false;
             ss_t = WAIT;
@@ -365,7 +371,8 @@ void loop()
           }
 
           //packet.flag |= 0x06;
-          //sent_to_single(packet);
+          // Sent to single
+          //AVR.Sent_Data(packet, peerInfo, 1);;
 
           /* Reset the packet message */
           //packet.tt_100 = 0;
@@ -438,7 +445,8 @@ void loop()
               old_pot = -1;
               ss_t = MENU;
               ss_r = START_; 
-              sent_to_all(flag | 0x03);
+              // Sent to all
+              AVR.Sent_Data(flag | 0x03);
             }
           }
 
@@ -451,7 +459,8 @@ void loop()
             old_pot = -1;
             ss_t = MENU;
             ss_r = START_;
-            sent_to_all(flag | 0x03);
+            // Sent to all
+            AVR.Sent_Data(flag | 0x03);
           }
 
           break;
@@ -510,14 +519,16 @@ void receiveCallBack(const uint8_t* macAddr, const uint8_t* data, int len)
     else if(recv==1)
     {
       #ifdef M_30
-        sent_to_single(recv & ~0x01);
+      // Sent to single
+        AVR.Sent_Data(recv & ~0x01, peerInfo, 1);
         ss_t = WAIT;
         /* Reset flag */
         //packet.flag = 0x00;
       #endif
 
       #ifdef M_100_101
-        sent_to_single(recv << 1);
+      // Sent to single
+        AVR.Sent_Data(recv << 1, peerInfo, 1);
         ss_t = WAIT;
         /* Reset Flag */
         //packet.flag &= ~(recv.flag << 1);
@@ -586,42 +597,13 @@ void sentCallBack(const uint8_t* macAddr, esp_now_send_status_t status)
 {
   // Called when data is sent
   char macStr[18];
-  //formatMacAddress(macAddr, macStr, 18);
+  //AVR.formatMacAddress(macAddr, macStr, 18);
 
   //Serial.printf("Last packet sent to: %s\n", macStr);
   //Serial.print("Last packet send status: ");
   //Serial.println(status==ESP_NOW_SEND_SUCCESS ? esp_now_ok |= 0x01 : esp_now_ok &= ~0x01);
 
   (status==ESP_NOW_SEND_SUCCESS ? esp_now_ok |= 0x01 : esp_now_ok &= ~0x01);
-}
-
-void formatMacAddress(const uint8_t* macAddr, char* info, int maxLength)
-{
-  // Formats MAC Address
-  snprintf(info, maxLength, "%02x:%02x:%02x:%02x:%02x:%02x", macAddr[0], macAddr[1], macAddr[2], macAddr[3], macAddr[4], macAddr[5]);
-}
-
-bool sent_to_all(const uint8_t msg)
-{
-  // Broadcast a message to every device in range
-  uint8_t BroadcastAdress[] = {0xff, 0xff, 0xff, 0xff, 0xff, 0xff};
-  esp_now_peer_info_t BroadInfo = {};
-
-  memcpy(&BroadInfo.peer_addr, BroadcastAdress, 6);
-
-  if(!esp_now_is_peer_exist(BroadcastAdress)) { esp_now_add_peer(&BroadInfo); }
-
-  // Send message
-  esp_err_t result = esp_now_send(BroadcastAdress, (uint8_t *)&msg, sizeof(msg));
-
-  return result==ESP_OK ? true : false;
-}
-
-bool sent_to_single(const uint8_t msg)
-{
-  esp_err_t result = esp_now_send(AddressFor_0, (uint8_t *)&msg, sizeof(msg));
-
-  return result==ESP_OK ? true : false;
 }
 
 /* Global Functions */

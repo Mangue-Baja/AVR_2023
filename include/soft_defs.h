@@ -2,6 +2,7 @@
 #define SOFT_DEFS
 
 #include <Arduino.h>
+#include "AVR_SENT.h"
 
 #define DEBOUCE_TIME 150 
 
@@ -27,4 +28,4 @@ bool conf_30 = false, conf_100 = false;
 uint8_t pos[2];
 int8_t pot_sel = 0, old_pot = -1;
 
-#endif      
+#endif

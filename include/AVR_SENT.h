@@ -9,7 +9,7 @@ class AVR_SENT
     public:
         AVR_SENT(const uint8_t *Address);
         ~AVR_SENT();
-        void formatMacAddress(const uint8_t* macAddr, char* info, int maxLength);
+        void formatMacAddress(const uint8_t *macAddr, char *info, int maxLength);
         int Register_Peer(esp_now_peer_info Info);
         bool Sent_Data(const uint8_t msg);
         bool Sent_Data(const uint8_t msg, esp_now_peer_info Info, bool address = false);
@@ -64,7 +64,7 @@ bool AVR_SENT::Sent_Data(const uint8_t msg, esp_now_peer_info Info, bool address
     return result==ESP_OK ? true : false;
 }
 
-void AVR_SENT::formatMacAddress(const uint8_t* macAddr, char* info, int maxLength)
+void AVR_SENT::formatMacAddress(const uint8_t *macAddr, char *info, int maxLength)
 {
     // Formats MAC Address
     snprintf(info, maxLength, "%02x:%02x:%02x:%02x:%02x:%02x", macAddr[0], macAddr[1], macAddr[2], macAddr[3], macAddr[4], macAddr[5]);

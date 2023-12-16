@@ -125,7 +125,7 @@ void loop()
         do
         {
           // Sent to All
-          AVR.Sent_Data(flag | 0x01); // send 1 how a flag
+          //AVR.Sent_Data(flag | 0x01); // send 1 how a flag
           delay(DEBOUCE_TIME);
           //Serial.printf("%d %d %d\n", esp_now_ok, conf_30, conf_100);
         } while(!esp_now_ok || !conf_30 || !conf_100);
@@ -238,7 +238,7 @@ void loop()
           if(digitalRead(SENSOR_ZERO))
           {
             // Sent to all
-            AVR.Sent_Data(flag | 0x04);
+            //AVR.Sent_Data(flag | 0x04);
             ss_r = LCD_DISPLAY;
             t_curr = millis();
           }
@@ -321,7 +321,7 @@ void loop()
             //Serial.println("hammm");
             //packet.flag |= 0x05;
             // Sent to single
-            AVR.Sent_Data(flag | 0x05, peerInfo, 1);
+            //AVR.Sent_Data(flag | 0x05, peerInfo, 1);
 
             /* Reset the packet message */
             //packet.tt_30 = 0;
@@ -346,7 +346,7 @@ void loop()
           if(interrupt)
           {
             // Sent to single
-            AVR.Sent_Data(flag | 0x06, peerInfo, 1);;  
+            //AVR.Sent_Data(flag | 0x06, peerInfo, 1);;  
 
             while(!digitalRead(SENSOR_101)) 
               t_101 = millis() - curr;
@@ -358,12 +358,12 @@ void loop()
             while(t_101>0xff)
             {
               // Sent to single
-              AVR.Sent_Data(0xff, peerInfo, 1);
+              //AVR.Sent_Data(0xff, peerInfo, 1);
               delay(DEBOUCE_TIME/10);
               t_101 -= 0xff;
             }
             // Sent to single
-            AVR.Sent_Data((uint8_t)t_101, peerInfo, 1);
+            //AVR.Sent_Data((uint8_t)t_101, peerInfo, 1);
             t_101 = 0;
             interrupt = false;
             ss_t = WAIT;
@@ -446,7 +446,7 @@ void loop()
               ss_t = MENU;
               ss_r = START_; 
               // Sent to all
-              AVR.Sent_Data(flag | 0x03);
+              //AVR.Sent_Data(flag | 0x03);
             }
           }
 
@@ -460,7 +460,7 @@ void loop()
             ss_t = MENU;
             ss_r = START_;
             // Sent to all
-            AVR.Sent_Data(flag | 0x03);
+            //AVR.Sent_Data(flag | 0x03);
           }
 
           break;
@@ -500,9 +500,9 @@ void Pin_Config()
 void receiveCallBack(const uint8_t* macAddr, const uint8_t* data, int len)
 {
   // Called when data is received
-  uint8_t recv;
+  uint8_t recv[len];
   
-  memcpy(&recv, data, sizeof(int));
+  memcpy(&recv, (uint8_t *)data, sizeof(len));
   //Serial.print("Data received: ");
   //Serial.println(len);
   //Serial.print("Message: ");
@@ -516,7 +516,7 @@ void receiveCallBack(const uint8_t* macAddr, const uint8_t* data, int len)
       conf_30 = true;
     }
 
-    else if(recv==1)
+    else if(recv[0]==1)
     {
       #ifdef M_30
       // Sent to single
@@ -535,18 +535,18 @@ void receiveCallBack(const uint8_t* macAddr, const uint8_t* data, int len)
       #endif
     }
 
-    else if(recv==2)
+    else if(recv[1]==2)
     {
       conf_100 = true;
     }
 
-    else if(recv==3)
+    else if(recv[2]==3)
     {
       ss_t = WAIT;
       //ss_r = WAIT; 
     }
 
-    else if(recv==4)
+    else if(recv[3]==4)
     {
       #ifdef M_30
         ss_t = RUN;
@@ -560,7 +560,7 @@ void receiveCallBack(const uint8_t* macAddr, const uint8_t* data, int len)
       #endif
     }
 
-    else if(recv==5)
+    else if(recv[4]==5)
     {
       //t_30 = millis() - t_curr;
       //packet.tt_30 = recv.tt_30;
@@ -570,7 +570,7 @@ void receiveCallBack(const uint8_t* macAddr, const uint8_t* data, int len)
       sel = false;
     }
 
-    else if(recv==6)
+    else if(recv[5]==6)
     {
       //t_100 = recv.tt_100;
       //t_101 = recv.tt_101;
@@ -582,10 +582,10 @@ void receiveCallBack(const uint8_t* macAddr, const uint8_t* data, int len)
 
   else
   {
-    time_101 += recv;
+    time_101 += recv[6];
     //Serial.println(time_101);
 
-    if(recv!=0xff)
+    if(recv[6]!=0xff)
     {
       ss_r = END_RUN;
       ignore = false;

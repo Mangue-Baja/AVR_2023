@@ -11,8 +11,8 @@ class AVR_SENT
         ~AVR_SENT();
         void formatMacAddress(const uint8_t *macAddr, char *info, int maxLength);
         int Register_Peer(esp_now_peer_info Info);
-        bool Sent_Data(const uint8_t msg);
-        bool Sent_Data(const uint8_t msg, esp_now_peer_info Info, bool address = false);
+        bool Sent_Data(const void *msg, uint16_t _size);
+        bool Sent_Data(const void *msg, uint16_t _size, esp_now_peer_info Info, bool address = false);
     private:
         uint8_t Address_HOST[6];
     protected:
@@ -47,19 +47,22 @@ int AVR_SENT::Register_Peer(esp_now_peer_info Info)
     return 0;
 }
 
-bool AVR_SENT::Sent_Data(const uint8_t msg)
+bool AVR_SENT::Sent_Data(const void *msg, uint16_t _size)
 {
     esp_now_peer_info_t BroadInfo = {};
     memcpy(&BroadInfo.peer_addr, BroadcastAdress, 6);
 
     if(!esp_now_is_peer_exist(BroadcastAdress)) { esp_now_add_peer(&BroadInfo); }
 
-    return Sent_Data(msg, BroadInfo);
+    return Sent_Data(&msg, _size, BroadInfo);
 }
 
-bool AVR_SENT::Sent_Data(const uint8_t msg, esp_now_peer_info Info, bool address)
+bool AVR_SENT::Sent_Data(const void *msg, uint16_t _size, esp_now_peer_info Info, bool address)
 {
-    esp_err_t result = esp_now_send(address ? Address_HOST : BroadcastAdress, (uint8_t *)&msg, sizeof(msg));
+    uint8_t send_data[_size];
+    memcpy(&send_data, (uint8_t *)&msg, _size);
+
+    esp_err_t result = esp_now_send(address ? Address_HOST : BroadcastAdress, (uint8_t *)&send_data, sizeof(send_data));
 
     return result==ESP_OK ? true : false;
 }

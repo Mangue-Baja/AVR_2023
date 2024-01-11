@@ -10,6 +10,16 @@
 #define M_0
 //#define M_30
 //#define M_100_101
+//#define BRIDGE
+
+typedef struct
+{
+  uint8_t ID;
+  uint64_t first_msg;
+  uint64_t second_msg;
+} msg_packet;
+
+msg_packet packet;
 
 /* Libraries Variables */
 LiquidCrystal_I2C lcd(0x27, 16, 2); 
@@ -18,14 +28,14 @@ File data;
 
 /* Debug Variables */
 bool interrupt = false;
-bool ignore = false;
 bool sel = true, err = true;
 unsigned long int curr = 0;
+uint32_t ID_msg = 0x01;
+uint64_t t0=0, t1=0;
 /* Global Variables */
 char file_name[20];
 bool sd_exist = false;
-const uint8_t AddressFor_0[/*M_0 adress*/] = {0x40, 0x91, 0x51, 0xFB, 0xEA, 0x18}; // Each ESP32 have your Mac Adress
-AVR_SENT AVR(AddressFor_0);
+uint8_t AddressFor_0[/*M_0 adress*/] = {0x40, 0x91, 0x51, 0xFB, 0xEA, 0x18}; // Each ESP32 have your Mac Adress
 
 /* Interrupts Routine */
 void ISR_30_100m();
@@ -38,6 +48,9 @@ char potSelect(uint8_t pin, uint8_t num_options);
 /* ESP-NOW Functions */
 void receiveCallBack(const uint8_t* macAddr, const uint8_t* data, int len);
 void sentCallBack(const uint8_t* macAddr, esp_now_send_status_t status);
+void formatMacAddress(const uint8_t* macAddr, char* info, int maxLength);
+bool sent_to_all(void *AnyMessage, int size);
+bool sent_to_single(void *AnyMessage, int size);
 
 void setup() 
 {
@@ -60,9 +73,15 @@ void setup()
   WiFi.disconnect();
 
   #ifdef M_0
+    packet.ID = 0x00;
+    packet.first_msg = 0;
+    packet.second_msg = 0;
+
     lcd.init();
     lcd.backlight();
     lcd.clear();
+
+    lcd.print(F("Iniciando..."));
   #endif
 }
 
@@ -72,10 +91,9 @@ void loop()
   {
     case INIT:
     {
-      lcd.print(F("Iniciando..."));
       if(esp_now_init()==ESP_OK)
       {
-        //Serial.println("Init ESP_NOW Protocol");
+        Serial.println("Init ESP_NOW Protocol");
 
         /* Broadcast Functions */ 
         esp_now_register_recv_cb(receiveCallBack);
@@ -83,18 +101,28 @@ void loop()
 
         #if defined(M_30) || defined(M_100_101)
           // Register peer
-          int ss = AVR.Register_Peer(peerInfo);
-          
-          if(ss==-1)
+          memcpy(peerInfo.peer_addr, AddressFor_0, 6);
+          peerInfo.channel = 0;
+          peerInfo.encrypt = false;
+
+          // Add peer
+          if(esp_now_add_peer(&peerInfo)!=ESP_OK)
           {
-            Serial.print("Add peer error!!!!")
-            while(1);
+            Serial.println("Failed to add peer");
+            return;
           }
+
+        #elif defined(BRIDGE)
+          packet.ID = 0x80;
+          packet.first_msg = 0;
+          packet.second_msg = 0;
         #endif
+      } 
+      
+      else 
+      {
 
-      } else {
-
-        #if defined(M_30) || defined(M_100_101)
+        #if defined(M_30) || defined(M_100_101) || defined(BRIDGE)
           digitalWrite(LED_BUILTIN, HIGH);
           delay(1500);
           esp_restart();
@@ -120,12 +148,14 @@ void loop()
 
       #if defined(M_30) || defined(M_100_101)
         ss_t = WAIT;
+      #elif defined(BRIDGE)
+        ss_t = _BRIDGE_;  
       #else
 
+        packet.ID |= ID_msg;
         do
         {
-          // Sent to All
-          //AVR.Sent_Data(flag | 0x01); // send 1 how a flag
+          sent_to_all(&packet, sizeof(msg_packet)); // send 1 how a flag
           delay(DEBOUCE_TIME);
           //Serial.printf("%d %d %d\n", esp_now_ok, conf_30, conf_100);
         } while(!esp_now_ok || !conf_30 || !conf_100);
@@ -136,9 +166,7 @@ void loop()
         lcd.clear();
 
         ss_t = SD_BEGIN;
-
-        // Sent to all
-        //(AVR.Sent_Data(1) ? ss_t=WAIT : 0);
+        //(sent_to_all(1) ? ss_t=WAIT : 0);
       #endif
       
       break;
@@ -151,6 +179,7 @@ void loop()
         t_101 = 0;
         //vel = 0;
       #endif
+
       delay(50);
       break;
     }
@@ -216,8 +245,7 @@ void loop()
         //  ss_t = MENU;
         //  ss_r = START_;
         //  old_pot = -1;
-        // Sent to all
-        //  AVR.Sent_Data(flag | 0x03);
+        //  sent_to_all(flag | 0x03);
         //}
       #else
         curr = millis();
@@ -235,10 +263,12 @@ void loop()
           printRun();
 
           //Serial.println(digitalRead(SENSOR_ZERO));
-          if(digitalRead(SENSOR_ZERO))
+          if(digitalRead(SENSOR_ZERO))  
           {
-            // Sent to all
-            //AVR.Sent_Data(flag | 0x04);
+            packet.ID = (ID_msg << 2);
+            t0 = millis();
+            sent_to_all(&packet, sizeof(msg_packet));
+            t1 = millis();
             ss_r = LCD_DISPLAY;
             t_curr = millis();
           }
@@ -263,8 +293,7 @@ void loop()
             //  ss_t = MENU;
             //  ss_r = START_;
             //  old_pot = -1;
-            // Sent to all
-            //  AVR.Sent_Data(flag | 0x03);
+            //  sent_to_all(flag | 0x03);
             //}
           }
           printRun();
@@ -283,14 +312,14 @@ void loop()
             //  ss_t = MENU;
             //  ss_r = START_;
             //  old_pot = -1;
-            // Sent to all
-            //  AVR.Sent_Data(flag | 0x03);
+            //  sent_to_all(flag | 0x03);
             //}
           }
+
           //ss_r = END_RUN;
           while(ss_r!=END_RUN)
           {
-            delay(DEBOUCE_TIME/10);
+            delay(DEBOUCE_TIME/15);
             //if(!digitalRead(B_SEL))
             //{
             //  delay(DEBOUCE_TIME);
@@ -309,19 +338,19 @@ void loop()
         case WAIT_30:
         {
           attachInterrupt(digitalPinToInterrupt(SENSOR_30_100), ISR_30_100m, FALLING);
-          //while(ss_r==WAIT_30 && !interrupt && count<2)
-          //{
-          //  packet.tt_30 = millis() - curr;  
-          //  Serial.println(packet.tt_30);
-          //}
+          while(ss_r==WAIT_30 && !interrupt)
+          {
+            packet.first_msg = millis() - curr;  
+            //Serial.println(packet.first_msg);
+          }
           
           while(!interrupt) delay(1);
           if(interrupt)
           {
             //Serial.println("hammm");
-            //packet.flag |= 0x05;
-            // Sent to single
-            //AVR.Sent_Data(flag | 0x05, peerInfo, 1);
+            packet.ID = 0x05;
+            packet.second_msg = 0;
+            sent_to_single(&packet, sizeof(packet));
 
             /* Reset the packet message */
             //packet.tt_30 = 0;
@@ -337,33 +366,22 @@ void loop()
         case WAIT_100:
         {
           attachInterrupt(digitalPinToInterrupt(SENSOR_30_100), ISR_30_100m, FALLING);
-          //while(ss_r==WAIT_100 && !interrupt)
-          //{
-            //packet.tt_100 = millis() - curr;
-          //}
+          while(ss_r==WAIT_100 && !interrupt)
+          {
+            packet.first_msg = millis() - curr;
+          }
 
           while(!interrupt) delay(1);
           if(interrupt)
-          {
-            // Sent to single
-            //AVR.Sent_Data(flag | 0x06, peerInfo, 1);;  
-
+          { 
             while(!digitalRead(SENSOR_101)) 
-              t_101 = millis() - curr;
+              packet.second_msg = millis() - curr;
             if(digitalRead(SENSOR_101)) 
-              t_101 = millis() - curr;
+              packet.second_msg = millis() - curr;
 
-            //memcpy(&teste, (uint16_t *)&speed, sizeof(uint16_t));
+            packet.ID = 0x06;
+            sent_to_single(&packet, sizeof(packet));
 
-            while(t_101>0xff)
-            {
-              // Sent to single
-              //AVR.Sent_Data(0xff, peerInfo, 1);
-              delay(DEBOUCE_TIME/10);
-              t_101 -= 0xff;
-            }
-            // Sent to single
-            //AVR.Sent_Data((uint8_t)t_101, peerInfo, 1);
             t_101 = 0;
             interrupt = false;
             ss_t = WAIT;
@@ -371,8 +389,7 @@ void loop()
           }
 
           //packet.flag |= 0x06;
-          // Sent to single
-          //AVR.Sent_Data(packet, peerInfo, 1);;
+          //sent_to_single(packet);
 
           /* Reset the packet message */
           //packet.tt_100 = 0;
@@ -445,8 +462,8 @@ void loop()
               old_pot = -1;
               ss_t = MENU;
               ss_r = START_; 
-              // Sent to all
-              //AVR.Sent_Data(flag | 0x03);
+              packet.ID = ID_msg | 0x02;
+              sent_to_all(&packet, sizeof(msg_packet));
             }
           }
 
@@ -459,8 +476,8 @@ void loop()
             old_pot = -1;
             ss_t = MENU;
             ss_r = START_;
-            // Sent to all
-            //AVR.Sent_Data(flag | 0x03);
+            packet.ID = ID_msg | 0x02;
+            sent_to_all(&packet, sizeof(msg_packet));
           }
 
           break;
@@ -468,6 +485,11 @@ void loop()
       }
       
       break;
+    }
+
+    case _BRIDGE_:
+    {
+      delay(100);
     }
   }
 }
@@ -499,111 +521,142 @@ void Pin_Config()
 /* ESP-NOW Functions */
 void receiveCallBack(const uint8_t* macAddr, const uint8_t* data, int len)
 {
+
   // Called when data is received
-  uint8_t recv[len];
-  
-  memcpy(&recv, (uint8_t *)data, sizeof(len));
+  msg_packet rec;
   //Serial.print("Data received: ");
   //Serial.println(len);
   //Serial.print("Message: ");
   //Serial.println(recv);
   //Serial.println();
 
-  if(!ignore)
+  memcpy(&rec, data, sizeof(rec));
+  if(rec.ID==0x05)
   {
-    if(recv==0)
-    {
-      conf_30 = true;
-    }
-
-    else if(recv[0]==1)
-    {
-      #ifdef M_30
-      // Sent to single
-        AVR.Sent_Data(recv & ~0x01, peerInfo, 1);
-        ss_t = WAIT;
-        /* Reset flag */
-        //packet.flag = 0x00;
-      #endif
-
-      #ifdef M_100_101
-      // Sent to single
-        AVR.Sent_Data(recv << 1, peerInfo, 1);
-        ss_t = WAIT;
-        /* Reset Flag */
-        //packet.flag &= ~(recv.flag << 1);
-      #endif
-    }
-
-    else if(recv[1]==2)
-    {
-      conf_100 = true;
-    }
-
-    else if(recv[2]==3)
-    {
-      ss_t = WAIT;
-      //ss_r = WAIT; 
-    }
-
-    else if(recv[3]==4)
-    {
-      #ifdef M_30
-        ss_t = RUN;
-        ss_r = WAIT_30;
-      #endif
-
-      #ifdef M_100_101 
-        t_101 = 0;
-        ss_t = RUN;
-        ss_r = WAIT_100;
-      #endif
-    }
-
-    else if(recv[4]==5)
-    {
-      //t_30 = millis() - t_curr;
-      //packet.tt_30 = recv.tt_30;
-      //digitalWrite(LED_BUILTIN, HIGH);
-      //Serial.println(packet.tt_30);
-      //Serial.println((float)t_30/1000);
-      sel = false;
-    }
-
-    else if(recv[5]==6)
-    {
-      //t_100 = recv.tt_100;
-      //t_101 = recv.tt_101;
-      //ss_r = END_RUN;
-      err = false;
-      ignore = true;
-    }
+    t_30 = rec.first_msg - ((t1-t0)*2);
+    sel = false;
+  }
+    
+  if(rec.ID==0x06)
+  {
+    t_100 = rec.first_msg - ((t1-t0)*2);
+    t_101 = rec.second_msg - ((t1-t0)*2);
+    err = false;
   }
 
-  else
+  if(rec.ID == 0x80)
   {
-    time_101 += recv[6];
-    //Serial.println(time_101);
-
-    if(recv[6]!=0xff)
+    if(rec.first_msg==0x01)
     {
-      ss_r = END_RUN;
-      ignore = false;
-    }    
+      #ifdef BRIDGE
+        sent_to_all(&rec, sizeof(msg_packet));
+      #else
+        #ifdef M_30
+          rec.first_msg ^= 0x01;
+          sent_to_single(&rec, sizeof(msg_packet));;
+          ss_t = WAIT;
+          /* Reset flag */
+          //packet.flag = 0x00;
+        #endif
+
+        #ifdef M_100_101
+          rec.first_msg <<= 1;
+          sent_to_single(&rec, sizeof(msg_packet));
+          ss_t = WAIT;
+          /* Reset Flag */
+          //packet.flag &= ~(recv.flag << 1);
+        #endif
+      #endif
+    }
+
+    if(rec.first_msg==0x00)
+    {
+      #ifdef BRIDGE
+        sent_to_all(&rec, sizeof(msg_packet));
+      #else
+        conf_30 = true; 
+      #endif
+    }
+
+    if(rec.first_msg==0x02)
+    {
+      #ifdef BRIDGE
+        sent_to_all(&rec, sizeof(msg_packet));
+      #else
+        conf_100 = true; 
+      #endif
+    }
+
+    if(rec.first_msg==0x03)
+    {
+      #ifdef BRIDGE
+        sent_to_all(&rec, sizeof(msg_packet));
+      #else
+        ss_t = WAIT;
+        //ss_r = WAIT; 
+      #endif
+    }
+
+    if(rec.first_msg==0x04)
+    {
+      #ifdef BRIDGE
+        sent_to_all(&rec, sizeof(msg_packet));
+      #else
+        #ifdef M_30
+          ss_t = RUN;
+          ss_r = WAIT_30;
+        #endif
+
+        #ifdef M_100_101 
+          t_101 = 0;
+          ss_t = RUN;
+          ss_r = WAIT_100;
+        #endif
+      #endif
+    }
   }
 }
 
 void sentCallBack(const uint8_t* macAddr, esp_now_send_status_t status) 
 {
   // Called when data is sent
-  char macStr[18];
-  //AVR.formatMacAddress(macAddr, macStr, 18);
+  //char macStr[18];
+  //formatMacAddress(macAddr, macStr, 18);
 
   //Serial.printf("Last packet sent to: %s\n", macStr);
-  //Serial.print("Last packet send status: ");
-  //Serial.println(status==ESP_NOW_SEND_SUCCESS ? esp_now_ok |= 0x01 : esp_now_ok &= ~0x01);
+  Serial.print("Last packet send status: ");
+  Serial.println(status==ESP_NOW_SEND_SUCCESS ? esp_now_ok |= 0x01 : esp_now_ok &= ~0x01);
 
   (status==ESP_NOW_SEND_SUCCESS ? esp_now_ok |= 0x01 : esp_now_ok &= ~0x01);
+}
+
+void formatMacAddress(const uint8_t* macAddr, char* info, int maxLength)
+{
+  // Formats MAC Address
+  snprintf(info, maxLength, "%02x:%02x:%02x:%02x:%02x:%02x", macAddr[0], macAddr[1], macAddr[2], macAddr[3], macAddr[4], macAddr[5]);
+}
+
+bool sent_to_all(void *AnyMessage, int size)
+{
+  // Broadcast a message to every device in range
+  uint8_t BroadcastAdress[] = {0xff, 0xff, 0xff, 0xff, 0xff, 0xff};
+  esp_now_peer_info_t BroadInfo = {};
+
+  memcpy(&BroadInfo.peer_addr, BroadcastAdress, 6);
+
+  if(!esp_now_is_peer_exist(BroadcastAdress)) { esp_now_add_peer(&BroadInfo); }
+
+  // Send message
+  esp_err_t result = esp_now_send(BroadcastAdress, (uint8_t *)AnyMessage, size);
+
+  return result==ESP_OK ? true : false;
+}
+
+bool sent_to_single(void *AnyMessage, int size)
+{
+  esp_err_t result = esp_now_send(AddressFor_0, (uint8_t *)AnyMessage, size);
+
+  return result==ESP_OK ? true : false;
 }
 
 /* Global Functions */
@@ -676,12 +729,12 @@ void ISR_30_100m()
 {
   if(ss_r==WAIT_30)
   {
-    //packet.tt_30 = millis() - curr;
+    packet.first_msg = millis() - curr;
   }
 
   else
   {
-    //packet.tt_100 = millis() - curr;
+    packet.first_msg = millis() - curr;
   }
   
   interrupt = true;

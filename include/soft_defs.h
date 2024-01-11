@@ -2,11 +2,10 @@
 #define SOFT_DEFS
 
 #include <Arduino.h>
-#include "AVR_SENT.h"
 
 #define DEBOUCE_TIME 150 
 
-typedef enum {INIT, WAIT, SD_BEGIN, MENU, RUN} state; 
+typedef enum {INIT, WAIT, SD_BEGIN, MENU, RUN, _BRIDGE_} state; 
 typedef enum {START_, LCD_DISPLAY, WAIT_30, WAIT_100, END_RUN, SAVE_RUN} run_state;
 
 uint8_t ss_t = INIT;

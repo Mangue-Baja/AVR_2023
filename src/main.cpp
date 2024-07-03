@@ -36,7 +36,7 @@ void setup()
     break;
 
   case Module_100m:
-    /* code */
+    init_100meters_communication();
     break;
 
   case BRIDGE:

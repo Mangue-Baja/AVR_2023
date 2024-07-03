@@ -28,7 +28,7 @@ void setup()
   switch (MODE)
   {
   case Module_0m:
-    /* code */
+    init_AVR_ECU_0meters_communication();
     break;
 
   case Module_30m:

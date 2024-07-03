@@ -22,6 +22,8 @@
 
 void setup() 
 {
+  Serial.begin(115200);
+  
   switch (MODE)
   {
     case Module_0m:
@@ -41,7 +43,6 @@ void setup()
       break;
 
     default:
-      Serial.begin(115200);
       pinMode(LED_BUILTIN, OUTPUT);
       for (;;)
       {

@@ -1,4 +1,5 @@
 #include <Arduino.h>
+#include <Modules.h>
 
 #define Module_0m   0x00 // id do modulo
 #define Module_30m  0x03 // id do modulo
@@ -18,12 +19,12 @@
  * BRIDGE == 0xff, apenas um modulo que servira de ponte para que a comunicação ESP-NOW possa acontecer
  sem que haja erro de sinal ou até mesmo não conseguir se comunicar.
 */
-#define MODE Module_0m
+#define MODE BRIDGE
 
 void setup() 
 {
   Serial.begin(115200);
-  
+
   switch (MODE)
   {
     case Module_0m:
@@ -39,7 +40,7 @@ void setup()
       break;
 
     case BRIDGE:
-      /* code */
+      init_bridge_communication();
       break;
 
     default:

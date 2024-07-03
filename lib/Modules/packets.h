@@ -32,4 +32,21 @@ typedef struct
     unsigned long timer2 = 0;
 } av_packet_t;
 
+typedef enum
+{
+    wait = 0,
+    __setup__ = 1,
+    run = 2
+} state_t;
+
+typedef enum
+{
+    menu = 0,
+    __start_run__ = 1,
+    wait_to_start = 2,
+    lcd_display = 3,
+    end_run = 4,
+    save_run = 5
+} av_ecu_t;
+
 #endif

@@ -1,10 +1,15 @@
 #include "Modules.h"
 
 av_packet_t msg_packet;
-uint8_t sensor_flag = 0;
+av_ecu_t av_ecu_flag = av_ecu_t::menu, run_flag = av_ecu_t::wait_to_start;
+state_t sensor_flag = state_t::wait;
+int8_t pot_sel = 0, old_pot = -1;
 unsigned long curr = 0;
 bool peer_registred = false;
-bool interrupt = false;
+bool interrupt = false, sd_device_init = false;
+bool esp_now_ok = false, conf_30 = false, conf_100 = false;
+bool sel_30 = false, sel_100 = false; // variaveis para parar o loop de cada sensor
+unsigned long time_30 = 0, time_100 = 0, time101 = 0;
 
 void printAddress()
 {
@@ -15,6 +20,218 @@ void printAddress()
 
     // Disconnect from Wifi
     WiFi.disconnect();
+}
+
+int8_t potSelect(uint8_t pin, uint8_t num_options)
+{
+  uint16_t read_val = analogRead(pin);
+  uint8_t option = map(read_val, 50, 1000, 0, 2*num_options-1);
+  //    if (option >= num_options)
+  //        option -= num_options;
+  return option % num_options;
+}
+
+/* ======================================== 0 METERS FUNCTIONS ========================================= */
+void init_AVR_ECU_0meters_communication()
+{
+    pinMode(LED_BUILTIN, OUTPUT);
+    printAddress();
+
+    /* Init the LCD module */
+    init_lcd();
+
+    if (!init_esp_now())
+    {
+        digitalWrite(LED_BUILTIN, HIGH);
+        error_message();
+        delay(500);
+        esp_restart();
+    }
+
+    if (register_receive_callback(Callback_receiver_0meters) && register_transmitter_callback(Callback_transmitter_0meters))
+        Serial.println("AV ECU OK!");
+    else
+        return;
+
+    WiFi.macAddress(msg_packet.mac_address);
+    msg_packet.command_for_state_machine = state_machine_command_t::check_module;
+    do
+    {
+        sent_to_all(&msg_packet, sizeof(av_packet_t));
+        delay(120);
+    } while (!esp_now_ok || !conf_30 || !conf_100);
+
+    ok_message();
+    sd_device_init = init_sd();
+    SD_status(sd_device_init);
+
+    msg_packet.id = module_t::metros_0;
+    pinMode(B_SEL, INPUT_PULLUP);
+    pinMode(SENSOR_0m, INPUT);
+    av_ecu_flag = av_ecu_t::menu;
+    run_flag = av_ecu_t::wait_to_start;
+
+    while (1)
+    {
+        switch (av_ecu_flag)
+        {
+            case av_ecu_t::menu:
+            {
+                intro_text();
+
+                if (!digitalRead(B_SEL))
+                {
+                    vTaskDelay(120);
+                    while (!digitalRead(B_SEL))
+                        vTaskDelay(1);
+
+                    start_the_av_run(millis());
+                    av_ecu_flag = av_ecu_t::__start_run__;
+                }
+
+                break;
+            }
+
+            case av_ecu_t::__start_run__:
+            {
+                switch (run_flag)
+                {
+                    case av_ecu_t::wait_to_start:
+                    {
+                        time101 = time_100 = time_30 = 0;
+                        start_the_av_run();
+
+                        if (digitalRead(SENSOR_0m))
+                        {
+                            msg_packet.command_for_state_machine = state_machine_command_t::check_module;
+                            sent_to_all(&msg_packet, sizeof(av_packet_t));
+                            save_tcurr_time(millis());
+                            run_flag = av_ecu_t::lcd_display;
+                        }
+
+                        break;
+                    }
+
+                    case av_ecu_t::lcd_display:
+                    {
+                        while (!sel_30)
+                            printRun(millis()/*30m*/, millis()/*100m*/);
+
+                        save_t30(time_30);
+
+                        while (!sel_100)
+                            printRun(millis()/*100m*/);
+                        
+                        save_t100(time_100);
+
+                        run_flag = av_ecu_t::end_run;
+                        
+                        break;
+                    }
+
+                    case av_ecu_t::end_run:
+                    {
+                        save_speed(time_100, time101);
+
+                        if (!digitalRead(B_SEL))
+                        {
+                            vTaskDelay(120);
+                            while(!digitalRead(B_SEL))
+                                vTaskDelay(1);
+                            run_flag = av_ecu_t::save_run;
+                            vTaskDelay(100);
+                        }
+
+                        break;
+                    }
+
+                    case av_ecu_t::save_run:
+                    {
+                        if (sd_device_init)
+                        {
+                            uint8_t pos[2];
+                            pos[0] = 17; pos[1] = 24;
+                            pot_sel = potSelect(POT, 2);
+
+                            if (pot_sel != old_pot)
+                            {
+                                select_sd(pos[pot_sel] % 16, (uint8_t)pos[pot_sel] / 16);
+                                old_pot = pot_sel;   
+                            }
+                            
+                            if (!digitalRead(B_SEL))
+                            {
+                                if (pot_sel == 0)
+                                {
+                                    sd_save_text(true);
+                                    save_in_SDcard(save_Data);
+                                } else {
+                                    sd_save_text(false);
+                                }
+
+                                sel_100 = sel_30 = false;
+                                old_pot = -1;
+                                av_ecu_flag = av_ecu_t::menu;
+                                run_flag = av_ecu_t::wait_to_start;
+                                msg_packet.command_for_state_machine = state_machine_command_t::cancel;
+                                sent_to_all(&msg_packet, sizeof(av_packet_t));
+                            }
+                        }
+
+                        else
+                        {
+                            SD_status(sd_device_init);
+                            sel_100 = sel_30 = false;
+                            old_pot = -1;
+                            av_ecu_flag = av_ecu_t::menu;
+                            run_flag = av_ecu_t::wait_to_start;
+                            msg_packet.command_for_state_machine = state_machine_command_t::cancel;
+                            sent_to_all(&msg_packet, sizeof(av_packet_t));
+                        }
+
+                        break;
+                    }
+                }
+            }
+        }
+    }
+}
+
+void Callback_transmitter_0meters(const uint8_t *macAddr, esp_now_send_status_t status)
+{
+    Serial.print("Last packet send status: ");
+    Serial.println(status == ESP_NOW_SEND_SUCCESS ? "Sucess" : "Failed");
+
+    esp_now_ok = status == ESP_NOW_SEND_SUCCESS;
+}
+
+void Callback_receiver_0meters(const uint8_t *macAddr, const uint8_t *data, int len)
+{
+    av_packet_t recv;
+    memcpy(&recv, (av_packet_t *)data, len);
+
+    if (recv.id == module_t::metros_30)
+    {
+        if (recv.command_for_state_machine == state_machine_command_t::flag_30m)
+            conf_30 = true;
+        if (recv.command_for_state_machine == state_machine_command_t::end_run_30m)
+        {
+            sel_30 = true;
+            time_30 = recv.time;
+        }    
+    }
+
+    if (recv.id == module_t::metros_100)
+    {
+        if (recv.command_for_state_machine == state_machine_command_t::flag_100m)
+            conf_100 = true;
+        if (recv.command_for_state_machine == state_machine_command_t::end_run_100m)
+        {
+            sel_100 = true;
+            time_100 = recv.time;
+            time101 = recv.timer2;
+        }
+    }
 }
 
 /* ======================================== 30 METERS FUNCTIONS ========================================= */
@@ -32,21 +249,23 @@ void init_30meters_communication()
 
     if (register_receive_callback(Callback_for_30meters))
         Serial.println("30 metros OK!");
+    else
+        return;
 
     msg_packet.id = module_t::metros_30;
     attachInterrupt(digitalPinToInterrupt(SENSOR_30m), ISR_30m, FALLING);
-    sensor_flag = 0;
+    sensor_flag = state_t::wait;
 
     while (1)
     {
         switch (sensor_flag)
         {
-        case 1:
+        case state_t::__setup__:
             curr = millis();
-            sensor_flag = 2;
+            sensor_flag = state_t::run;
             break;
 
-        case 2:
+        case state_t::run:
             attachInterrupt(digitalPinToInterrupt(SENSOR_30m), ISR_30m, FALLING);
 
             while (!interrupt)
@@ -60,7 +279,7 @@ void init_30meters_communication()
                 msg_packet.command_for_state_machine = state_machine_command_t::end_run_30m;
                 msg_packet.time = msg_packet.time; // redundancia feita de proposito, vai que de erro magicamente
                 sent_to_single(&msg_packet, sizeof(av_packet_t), msg_packet.mac_address);
-                sensor_flag = 0;
+                sensor_flag = state_t::wait;
                 interrupt = false;
                 msg_packet.command_for_state_machine = state_machine_command_t::do_nothing;
             }
@@ -107,12 +326,12 @@ void Callback_for_30meters(const uint8_t *macAddr, const uint8_t *data, int len)
 
         if (recv.command_for_state_machine == state_machine_command_t::start_run)
         {
-            sensor_flag = 1;
+            sensor_flag = state_t::__setup__;
         }
 
         if (recv.command_for_state_machine == state_machine_command_t::cancel)
         {
-            sensor_flag = 0;
+            sensor_flag = state_t::wait;
         }
     }
 }
@@ -132,22 +351,24 @@ void init_100meters_communication()
 
     if (register_receive_callback(Callback_for_100meters))
         Serial.println("100 metros OK!");
+    else
+        return;
 
     msg_packet.id = module_t::metros_100;
     attachInterrupt(digitalPinToInterrupt(SENSOR_100m), ISR_100m, FALLING);
     pinMode(SENSOR_101m, INPUT);
-    sensor_flag = 0;
+    sensor_flag = state_t::wait;
 
     while (1)
     {
         switch (sensor_flag)
         {
-        case 1:
+        case state_t::__setup__:
             curr = millis();
-            sensor_flag = 2;
+            sensor_flag = state_t::run;
             break;
 
-        case 2:
+        case state_t::run:
             attachInterrupt(digitalPinToInterrupt(SENSOR_100m), ISR_100m, FALLING);
 
             while (!interrupt)
@@ -167,7 +388,7 @@ void init_100meters_communication()
                 msg_packet.time = msg_packet.time;     // redundancia feita de proposito, vai que de erro magicamente
                 msg_packet.timer2 = msg_packet.timer2; // redundancia feita de proposito, vai que de erro magicamente
                 sent_to_single(&msg_packet, sizeof(av_packet_t), msg_packet.mac_address);
-                sensor_flag = 0;
+                sensor_flag = state_t::wait;
                 interrupt = false;
                 msg_packet.command_for_state_machine = state_machine_command_t::do_nothing;
             }
@@ -214,12 +435,12 @@ void Callback_for_100meters(const uint8_t *macAddr, const uint8_t *data, int len
 
         if (recv.command_for_state_machine == state_machine_command_t::start_run)
         {
-            sensor_flag = 1;
+            sensor_flag = state_t::__setup__;
         }
 
         if (recv.command_for_state_machine == state_machine_command_t::cancel)
         {
-            sensor_flag = 0;
+            sensor_flag = state_t::wait;
         }
     }
 }
@@ -239,6 +460,8 @@ void init_bridge_communication()
 
     if (register_receive_callback(Bridge_callback))
         Serial.println("Bridge OK!");
+    else
+        return;
 
     while (1)
     {

@@ -23,9 +23,14 @@ bool register_peer(uint8_t* mac)
     return true;
 }
 
-bool register_receive_callback(esp_now_callback receive_callback)
+bool register_receive_callback(esp_now_receiver_callback_t receive_callback)
 {
     return esp_now_register_recv_cb(receive_callback) == ESP_OK ? true : false;
+}
+
+bool register_transmitter_callback(esp_now_transmitter_callback_t transmitter_callback)
+{
+    return esp_now_register_send_cb(transmitter_callback) == ESP_OK ? true : false;
 }
 
 bool sent_to_all(void *AnyMessage, int size)

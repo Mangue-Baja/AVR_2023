@@ -19,7 +19,7 @@
  * BRIDGE == 0xff, apenas um modulo que servira de ponte para que a comunicação ESP-NOW possa acontecer
  sem que haja erro de sinal ou até mesmo não conseguir se comunicar.
 */
-#define MODE BRIDGE
+#define MODE Module_0m
 
 void setup()
 {

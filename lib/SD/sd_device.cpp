@@ -3,9 +3,9 @@
 File data;
 char file_name[20];
 
-bool init_sd()
+bool init_sd(uint8_t pin)
 {
-    if (!SD.begin(SD_CS))
+    if (!SD.begin(pin))
         return false;
 
     File root = SD.open("/");
@@ -28,6 +28,7 @@ bool init_sd()
 
     if (data)
     {
+        data.println("tempo_30,tempo_100,velocidade");
         data.close();
         return true;
     } else
@@ -40,7 +41,7 @@ void save_Data(unsigned long _t30, unsigned long _t100, float _v)
 
     if (data)
     {
-        data.printf("%d,%d,%f\n", _t30, _t100, _v);
+        data.printf("%d,%d,%f\r\n", _t30, _t100, _v);
         data.close();
     }
 }

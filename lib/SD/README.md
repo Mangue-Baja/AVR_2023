@@ -1,7 +1,7 @@
     
 ## Funções para o SD card
 
-### sd_device
+### sd_device.h
 
 - Inicializa o módulo SD e a estrutura do csv
 ```c

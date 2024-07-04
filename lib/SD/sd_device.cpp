@@ -31,8 +31,9 @@ bool init_sd(uint8_t pin)
         data.println("tempo_30,tempo_100,velocidade");
         data.close();
         return true;
-    } else
+    } else {
         return false;
+    }
 }
 
 void save_Data(unsigned long _t30, unsigned long _t100, float _v)

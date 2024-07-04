@@ -2,7 +2,6 @@
 #define SDDEVICE_H
 
 #include <Arduino.h>
-#include <driver/gpio.h>
 #include <SD.h>
 
 bool init_sd(uint8_t pin);

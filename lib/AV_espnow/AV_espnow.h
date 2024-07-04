@@ -5,7 +5,7 @@
 #include <esp_now.h>
 
 typedef void (*esp_now_receiver_callback_t)(const uint8_t *, const uint8_t *, int);
-typedef void (*esp_now_transmitter_callback_t)(const uint8_t *macAddr, esp_now_send_status_t status);
+typedef void (*esp_now_transmitter_callback_t)(const uint8_t *, esp_now_send_status_t);
 
 bool init_esp_now(void);
 bool register_peer(uint8_t *mac);

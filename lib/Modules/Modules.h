@@ -9,11 +9,11 @@
 #include "sd_device.h"
 
 #define POT         GPIO_NUM_26 // Pino do potenciometro
-#define B_SEL       GPIO_NUM_6  // Pino do botão para inicar o AVR
-#define SENSOR_0m   GPIO_NUM_12 // Pino do sensor de 0 metros
-#define SENSOR_30m  GPIO_NUM_15 // Pino do sensor de 30 metros
-#define SENSOR_100m GPIO_NUM_15 // Pino do sensor de 100 metros
-#define SENSOR_101m GPIO_NUM_13 // Pino do sensor de 101 metros
+#define B_SEL       GPIO_NUM_5  // Pino do botão para inicar o AVR
+#define SENSOR_0m   GPIO_NUM_15 // Pino do sensor de 0 metros
+#define SENSOR_30m  GPIO_NUM_5 // Pino do sensor de 30 metros
+#define SENSOR_100m GPIO_NUM_5  // Pino do sensor de 100 metros
+#define SENSOR_101m GPIO_NUM_18 // Pino do sensor de 101 metros
 
 void printAddress(void);
 int8_t potSelect(uint8_t pin, uint8_t num_options);

@@ -15,6 +15,7 @@ void init_lcd()
     lcd.backlight();
     lcd.clear();
     lcd.print(F("Iniciando..."));
+    delay(500);
 }
 
 void error_message()

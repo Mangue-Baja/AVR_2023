@@ -34,6 +34,7 @@ int8_t potSelect(uint8_t pin, uint8_t num_options)
 /* ======================================== 0 METERS FUNCTIONS ========================================= */
 void init_AVR_ECU_0meters_communication()
 {
+    bool _lcd_print = true;
     pinMode(LED_BUILTIN, OUTPUT);
     printAddress();
 
@@ -77,7 +78,11 @@ void init_AVR_ECU_0meters_communication()
         {
             case av_ecu_t::menu:
             {
-                intro_text();
+                if (_lcd_print)
+                {
+                    intro_text();
+                    _lcd_print = false;
+                }
 
                 if (!digitalRead(B_SEL))
                 {
@@ -169,6 +174,7 @@ void init_AVR_ECU_0meters_communication()
                                     sd_save_text(false);
                                 }
 
+                                _lcd_print = true;
                                 sel_100 = sel_30 = false;
                                 old_pot = -1;
                                 av_ecu_flag = av_ecu_t::menu;
@@ -181,6 +187,7 @@ void init_AVR_ECU_0meters_communication()
                         else
                         {
                             SD_status(sd_device_init);
+                            _lcd_print = true;
                             sel_100 = sel_30 = false;
                             old_pot = -1;
                             av_ecu_flag = av_ecu_t::menu;
@@ -208,7 +215,7 @@ void Callback_transmitter_0meters(const uint8_t *macAddr, esp_now_send_status_t 
 void Callback_receiver_0meters(const uint8_t *macAddr, const uint8_t *data, int len)
 {
     av_packet_t recv;
-    memcpy(&recv, (av_packet_t *)data, len);
+    memcpy(&recv, (av_packet_t *)data, len);    
 
     if (recv.id == module_t::metros_30)
     {
@@ -321,7 +328,7 @@ void Callback_for_30meters(const uint8_t *macAddr, const uint8_t *data, int len)
                 }
             }
             msg_packet.command_for_state_machine = state_machine_command_t::flag_30m;
-            sent_to_single(&recv, sizeof(av_packet_t), msg_packet.mac_address);
+            sent_to_single(&msg_packet, sizeof(av_packet_t), msg_packet.mac_address);
         }
 
         if (recv.command_for_state_machine == state_machine_command_t::start_run)
@@ -334,6 +341,9 @@ void Callback_for_30meters(const uint8_t *macAddr, const uint8_t *data, int len)
             sensor_flag = state_t::wait;
         }
     }
+
+    if (recv.id == module_t::metros_100)
+        sent_to_single(&recv, sizeof(av_packet_t), recv.mac_address);
 }
 
 /* ======================================== 100 METERS FUNCTIONS ======================================== */
@@ -387,7 +397,7 @@ void init_100meters_communication()
                 msg_packet.command_for_state_machine = state_machine_command_t::end_run_100m;
                 msg_packet.time = msg_packet.time;     // redundancia feita de proposito, vai que de erro magicamente
                 msg_packet.timer2 = msg_packet.timer2; // redundancia feita de proposito, vai que de erro magicamente
-                sent_to_single(&msg_packet, sizeof(av_packet_t), msg_packet.mac_address);
+                sent_to_all(&msg_packet, sizeof(av_packet_t));
                 sensor_flag = state_t::wait;
                 interrupt = false;
                 msg_packet.command_for_state_machine = state_machine_command_t::do_nothing;
@@ -420,17 +430,8 @@ void Callback_for_100meters(const uint8_t *macAddr, const uint8_t *data, int len
     {
         if (recv.command_for_state_machine == state_machine_command_t::check_module)
         {
-            if (!peer_registred)
-            {
-                if (register_peer(recv.mac_address))
-                {
-                    memcpy(msg_packet.mac_address, recv.mac_address, 6);
-                    peer_registred = true;
-                    Serial.println("Peer registred");
-                }
-            }
             msg_packet.command_for_state_machine = state_machine_command_t::flag_100m;
-            sent_to_single(&recv, sizeof(av_packet_t), msg_packet.mac_address);
+            sent_to_all(&msg_packet, sizeof(av_packet_t));
         }
 
         if (recv.command_for_state_machine == state_machine_command_t::start_run)

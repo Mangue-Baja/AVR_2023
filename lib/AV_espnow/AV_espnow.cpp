@@ -7,7 +7,7 @@ bool init_esp_now()
     return esp_now_init() == ESP_OK ? true : false;
 }
 
-bool register_peer(uint8_t* mac)
+bool register_peer(uint8_t *mac)
 {
     // Register peer
     memcpy(peerInfo.peer_addr, mac, 6);
@@ -45,14 +45,14 @@ bool sent_to_all(void *AnyMessage, int size)
         esp_now_add_peer(&BroadInfo);
 
     // Send message
-    esp_err_t result = esp_now_send(BroadcastAdress, (uint8_t *)AnyMessage, size);
+    esp_err_t result = esp_now_send(BroadcastAdress, (uint8_t*)AnyMessage, size);
 
     return result == ESP_OK ? true : false;
 }
 
-bool sent_to_single(void *AnyMessage, int size, uint8_t* address_from_receive)
+bool sent_to_single(void *AnyMessage, int size, uint8_t *address_from_receive)
 {
-    esp_err_t result = esp_now_send(address_from_receive, (uint8_t *)AnyMessage, size);
+    esp_err_t result = esp_now_send(address_from_receive, (uint8_t*)AnyMessage, size);
 
     return result == ESP_OK ? true : false;
 }

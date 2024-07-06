@@ -4,7 +4,7 @@
 #include <Arduino.h>
 #include <LiquidCrystal_I2C.h>
 
-typedef void (*function_Sdsave)(unsigned long, unsigned long, float);
+typedef bool (*function_Sdsave)(unsigned long, unsigned long, float);
 
 void init_lcd(void);
 void error_message(void);
@@ -21,8 +21,8 @@ String format_time(unsigned long int t1);
 void save_t30(unsigned long t);
 void save_t100(unsigned long t);
 void save_speed(unsigned long t1, unsigned long t2);
-void sd_save_text(bool i);
-void select_sd(uint8_t pos1, uint8_t pos2);
-void save_in_SDcard(function_Sdsave f);
+void sd_save_text(function_Sdsave sv_dt);
+void sd_save_text(void);
+void select_sd(uint8_t pos1);
 
 #endif

@@ -20,7 +20,8 @@ typedef enum
     flag_30m = 0x05,
     end_run_30m = uint8_t(~0x05),
     flag_100m = 0x06,
-    end_run_100m = uint8_t(~0x06)
+    end_run_100m = uint8_t(~0x06),
+    reset_ = 0x07
 } state_machine_command_t;
 
 typedef struct 

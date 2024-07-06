@@ -36,7 +36,7 @@ bool init_sd(uint8_t pin)
     }
 }
 
-void save_Data(unsigned long _t30, unsigned long _t100, float _v)
+bool save_AV_Data(unsigned long _t30, unsigned long _t100, float _v)
 {
     data = SD.open(file_name, FILE_APPEND);
 
@@ -44,5 +44,7 @@ void save_Data(unsigned long _t30, unsigned long _t100, float _v)
     {
         data.printf("%d,%d,%f\r\n", _t30, _t100, _v);
         data.close();
+        return true;
     }
+    return false;
 }

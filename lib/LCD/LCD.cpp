@@ -36,16 +36,17 @@ void ok_message()
 {
     lcd.clear();
     lcd.print(F("ESP-NOW ok!"));
-    delay(500);
+    delay(600);
     lcd.clear();
 }
 
 void SD_status(bool status)
 {
+    lcd.clear();
     String n = status ? "SD instalado" : "Nao ha SD";
 
     lcd.print(n);
-    delay(120 * 5);
+    delay(120 * 7);
     lcd.clear();
 }
 
@@ -142,30 +143,45 @@ void save_speed(unsigned long t1, unsigned long t2)
     printRun();
 }
 
-void sd_save_text(bool i)
+void sd_save_text(function_Sdsave sv_dt)
 {
-    if (i)
-        lcd.print(F("  Salvando...  "));
-    else
+    lcd.clear();
+    lcd.print(F("Salvando: "));
+    bool *sd_save_ok = (bool*)malloc(sizeof(bool));
+    *sd_save_ok = sv_dt(t_30, t_100, vel);
+    delay(1000);
+    if (*sd_save_ok)
     {
-        lcd.print(F("Voltando"));
-        delay(120 * 3);
-        lcd.clear();
+        lcd.setCursor(10, 0);
+        lcd.print(F("OK"));
+    } 
+
+    else 
+    {
+        lcd.setCursor(0, 1);
+        lcd.print(F("Falhou"));
     }
-    
+
+    free(sd_save_ok);
+    delay(1000);
+    lcd.clear();
+    sd_save_text();
 }
 
-void select_sd(uint8_t pos1, uint8_t pos2)
+void sd_save_text()
+{
+    lcd.clear();
+    lcd.print(F("Voltando"));
+    delay(120 * 7);
+    lcd.clear();  
+}
+
+void select_sd(uint8_t pos1)
 {
     lcd.setCursor(0, 0);
     lcd.print(F(" DESEJA SALVAR? "));
     lcd.setCursor(0, 1);
     lcd.print(F("   SIM    NAO   "));
-    lcd.setCursor(pos1, pos2);
+    lcd.setCursor(pos1 == 0 ? 1 : 8, 1);
     lcd.write('>');
-}
-
-void save_in_SDcard(function_Sdsave f)
-{
-    f(t_30, t_100, vel);
 }

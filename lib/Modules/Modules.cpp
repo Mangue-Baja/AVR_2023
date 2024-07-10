@@ -41,7 +41,9 @@ void init_AVR_ECU_0meters_communication()
     /* Init the LCD module */
     init_lcd();
 
-    if (!init_esp_now())
+    if (!init_esp_now()                                                  \
+        || !register_receive_callback(Callback_receiver_0meters)         \
+        || !register_transmitter_callback(Callback_transmitter_0meters)) \
     {
         digitalWrite(LED_BUILTIN, HIGH);
         error_message();
@@ -49,10 +51,7 @@ void init_AVR_ECU_0meters_communication()
         esp_restart();
     }
 
-    if (register_receive_callback(Callback_receiver_0meters) && register_transmitter_callback(Callback_transmitter_0meters))
-        Serial.println("AV ECU OK!");
-    else
-        return;
+    Serial.println("AV ECU OK!");
 
     WiFi.macAddress(msg_packet.mac_address);
     msg_packet.command_for_state_machine = state_machine_command_t::check_module;
@@ -304,8 +303,10 @@ void Callback_receiver_0meters(const uint8_t *macAddr, const uint8_t *data, int 
     {
         if (recv.command_for_state_machine == state_machine_command_t::flag_30m)
             conf_30 = true;
+
         if (recv.command_for_state_machine == state_machine_command_t::flag_100m)
             conf_100 = true;
+
         if (recv.command_for_state_machine == state_machine_command_t::end_run_30m)
         {
             sel_30 = true;
@@ -327,17 +328,14 @@ void init_30meters_communication()
     pinMode(LED_BUILTIN, OUTPUT);
     printAddress();
 
-    if (!init_esp_now())
+    if (!init_esp_now() || !register_receive_callback(Callback_for_30meters))
     {
         digitalWrite(LED_BUILTIN, HIGH);
         delay(1500);
         esp_restart();
     }
 
-    if (register_receive_callback(Callback_for_30meters))
-        Serial.println("30 metros OK!");
-    else
-        return;
+    Serial.println("30 metros OK!");
 
     msg_packet.id = module_t::metros_30;
     attachInterrupt(digitalPinToInterrupt(SENSOR_30m), ISR_30m, FALLING);
@@ -449,17 +447,14 @@ void init_100meters_communication()
     pinMode(LED_BUILTIN, OUTPUT);
     printAddress();
 
-    if (!init_esp_now())
+    if (!init_esp_now() || !register_receive_callback(Callback_for_100meters))
     {
         digitalWrite(LED_BUILTIN, HIGH);
         delay(1500);
         esp_restart();
     }
 
-    if (register_receive_callback(Callback_for_100meters))
-        Serial.println("100 metros OK!");
-    else
-        return;
+    Serial.println("100 metros OK!");
 
     msg_packet.id = module_t::metros_100;
     attachInterrupt(digitalPinToInterrupt(SENSOR_100m), ISR_100m, FALLING);
@@ -536,6 +531,7 @@ void Callback_for_100meters(const uint8_t *macAddr, const uint8_t *data, int len
 
         if (recv.command_for_state_machine == state_machine_command_t::cancel)
             sensor_flag = state_t::wait;
+
         if (recv.command_for_state_machine == state_machine_command_t::reset_)
         {
             sensor_flag = state_t::wait;
@@ -550,17 +546,14 @@ void init_bridge_communication()
     pinMode(LED_BUILTIN, OUTPUT);
     printAddress();
 
-    if (!init_esp_now())
+    if (!init_esp_now() || !register_receive_callback(Bridge_callback))
     {
         digitalWrite(LED_BUILTIN, HIGH);
         delay(1500);
         esp_restart();
     }
 
-    if (register_receive_callback(Bridge_callback))
-        Serial.println("Bridge OK!");
-    else
-        return;
+    Serial.println("Bridge OK!");
 
     while (1)
     {
@@ -571,7 +564,7 @@ void init_bridge_communication()
 void Bridge_callback(const uint8_t *macAddr, const uint8_t *data, int len)
 {
     av_packet_t recv;
-    memcpy(&recv, (av_packet_t *)data, len);
+    memcpy(&recv, (av_packet_t*)data, len);
 
     if (sent_to_all(&recv, sizeof(av_packet_t)))
         Serial.println("Sucesso ao enviar a mensagem");

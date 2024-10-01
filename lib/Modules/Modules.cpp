@@ -498,7 +498,7 @@ void init_100meters_communication()
             break;
 
         default:
-            detachInterrupt(digitalPinToInterrupt(SENSOR_30m));
+            detachInterrupt(digitalPinToInterrupt(SENSOR_100m));
             vTaskDelay(50);
             break;
         }

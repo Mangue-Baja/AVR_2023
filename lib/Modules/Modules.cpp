@@ -480,9 +480,10 @@ void init_100meters_communication()
 
             while (!interrupt)
                 msg_packet.time = millis() - curr;
-
-            while (!interrupt)
-                vTaskDelay(1);
+            
+            Serial.println();
+            //while (!interrupt)
+            //    vTaskDelay(1);
 
             if (interrupt)
             {
@@ -503,7 +504,7 @@ void init_100meters_communication()
             break;
 
         default:
-            detachInterrupt(digitalPinToInterrupt(SENSOR_30m));
+            detachInterrupt(digitalPinToInterrupt(SENSOR_100m));
             vTaskDelay(50);
             break;
         }
@@ -571,7 +572,7 @@ void init_bridge_communication()
 void Bridge_callback(const uint8_t *macAddr, const uint8_t *data, int len)
 {
     av_packet_t recv;
-    memcpy(&recv, (av_packet_t *)data, len);
+    memcpy(&recv, (av_packet_t*)data, len);
 
     if (sent_to_all(&recv, sizeof(av_packet_t)))
         Serial.println("Sucesso ao enviar a mensagem");

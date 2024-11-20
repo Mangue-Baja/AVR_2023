@@ -457,7 +457,8 @@ void init_100meters_communication()
     Serial.println("100 metros OK!");
 
     msg_packet.id = module_t::metros_100;
-    attachInterrupt(digitalPinToInterrupt(SENSOR_100m), ISR_100m, FALLING);
+    //attachInterrupt(digitalPinToInterrupt(SENSOR_100m), ISR_100m, FALLING);
+    pinMode(SENSOR_100m, INPUT_PULLUP);
     pinMode(SENSOR_101m, INPUT_PULLUP);
     sensor_flag = state_t::wait;
 
@@ -471,20 +472,26 @@ void init_100meters_communication()
             break;
 
         case state_t::run:
-            attachInterrupt(digitalPinToInterrupt(SENSOR_100m), ISR_100m, FALLING);
+            //attachInterrupt(digitalPinToInterrupt(SENSOR_100m), ISR_100m, FALLING);
 
-            while (!interrupt)
+            while (/*!interrupt*/ digitalRead(SENSOR_100m))
+                msg_packet.time = millis() - curr;
+            if (!digitalRead(SENSOR_100m))
                 msg_packet.time = millis() - curr;
 
-            while (!interrupt)
-                vTaskDelay(1);
+            Serial.println(msg_packet.time);
+            //while (!interrupt)
+            //    vTaskDelay(1);
 
-            if (interrupt)
-            {
+            //if (interrupt)
+            //{
                 while (digitalRead(SENSOR_101m))
                     msg_packet.timer2 = millis() - curr;
                 if (!digitalRead(SENSOR_101m))
                     msg_packet.timer2 = millis() - curr;
+
+                Serial.println(msg_packet.timer2);
+                Serial.println();
 
                 msg_packet.command_for_state_machine = state_machine_command_t::end_run_100m;
                 msg_packet.time = msg_packet.time;     // redundancia feita de proposito, vai que de erro magicamente
@@ -493,12 +500,12 @@ void init_100meters_communication()
                 sensor_flag = state_t::wait;
                 interrupt = false;
                 msg_packet.command_for_state_machine = state_machine_command_t::do_nothing;
-            }
+            //}
 
             break;
 
         default:
-            detachInterrupt(digitalPinToInterrupt(SENSOR_30m));
+            //detachInterrupt(digitalPinToInterrupt(SENSOR_100m));
             vTaskDelay(50);
             break;
         }

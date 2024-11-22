@@ -479,7 +479,7 @@ void init_100meters_communication()
             if (!digitalRead(SENSOR_100m))
                 msg_packet.time = millis() - curr;
 
-            Serial.println(msg_packet.time);
+            //Serial.println(msg_packet.time);
             //while (!interrupt)
             //    vTaskDelay(1);
 
@@ -490,8 +490,8 @@ void init_100meters_communication()
                 if (!digitalRead(SENSOR_101m))
                     msg_packet.timer2 = millis() - curr;
 
-                Serial.println(msg_packet.timer2);
-                Serial.println();
+                //Serial.println(msg_packet.timer2);
+                //Serial.println();
 
                 msg_packet.command_for_state_machine = state_machine_command_t::end_run_100m;
                 msg_packet.time = msg_packet.time;     // redundancia feita de proposito, vai que de erro magicamente
